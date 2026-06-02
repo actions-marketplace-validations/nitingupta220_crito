@@ -2,19 +2,19 @@
 
 All inference goes through OpenRouter's OpenAI-compatible `/api/v1/chat/completions`, authenticated with the user's own key (BYOK).
 
+> **Updated 2026-06-02 from the live spike** — see [`spike-openrouter-quota.md`](spike-openrouter-quota.md). The `models[]` array is hard-capped at **3**; `require_parameters: true` eliminates the free pool; `deepseek-v4-flash:free` is a dead ID; `gpt-oss-120b:free` is the only reliably-JSON free model.
+
 ## Default review chain
 
-A config-defined, ordered `models[]` fallback array (never hardcoded — the `:free` roster churns):
+A config-defined, ordered `models[]` fallback array — **max 3 entries** (the API rejects more), never hardcoded (the `:free` roster churns), verified live:
 
 ```
-qwen/qwen3-coder:free        → strongest free pure-coder, 1M context (whole PR in one call)
-deepseek/deepseek-v4-flash:free → native reasoning for subtle bug/security, 1M context
-openai/gpt-oss-120b:free     → OpenAI-lineage backstop, most reliable structured-output compliance
+openai/gpt-oss-120b:free   → only reliably-pure-JSON free model; lead the STRUCTURED call here
+qwen/qwen3-coder:free      → strong pure-coder, 1M ctx (often upstream-saturated; defensive-parse)
+z-ai/glm-4.5-air:free      → currently-serving fallback (thinking model — see caveats)
 ```
 
-Lead with the 1M-context coder so a whole compressed PR fits in one call. (Trimmed from a 5-model array to ~3 per the critique: more models = more 404-pruning, more attribution surface, possibly more quota burn.)
-
-Other free options seen mid-2026: `moonshotai/kimi-k2.6:free` (262K ctx, agentic), `z-ai/glm-4.5-air:free` (131K ctx, hybrid thinking), `meta-llama/llama-3.3-70b-instruct:free` (131K, generic backstop). Note: GLM-4.6 went paid; DeepSeek R1/V3 free aged out; Kimi is now K2.6 — **treat all IDs as runtime config.**
+`deepseek/deepseek-v4-flash:free` was removed — it returns `404 No endpoints found` (dead ID). Lead with the JSON-reliable model because parseable findings are the binding requirement for posting comments; if pure code-reasoning matters more for a given call, lead with `qwen/qwen3-coder:free` and lean on the defensive parser (a per-call-type tradeoff). Other IDs seen mid-2026: `moonshotai/kimi-k2.6:free` (262K ctx, reasoning), `meta-llama/llama-3.3-70b-instruct:free`. **Treat all IDs as runtime config and liveness-probe them** — GLM-4.6 went paid, DeepSeek R1/V3 free aged out, `:free` slugs resolve to dated snapshots (`kimi-k2.6:free` → `kimi-k2.6-20260420:free`).
 
 ## Fallback mechanics
 
@@ -70,8 +70,9 @@ response_format: {
 }
 ```
 
-- Pair with `require_parameters: true` so fallback only lands on schema-honoring providers.
-- Keep a **defensive JSON-repair parser + single re-prompt** — free providers occasionally emit JSON-as-text despite the directive.
+- **Do NOT pair with `require_parameters: true`** — the live spike showed it returns `404 No endpoints found` on the entire free pool. Send `json_schema` **best-effort** (compliant models honor it, others ignore it).
+- The **defensive JSON-repair parser + single re-prompt is mandatory** (not occasional): the spike observed markdown-fenced JSON, **empty content** (thinking models that spent `max_tokens` on reasoning), and raw control characters that break strict parsing. Parse with control-char tolerance, strip ```` ``` ```` fences, re-prompt/advance on empty.
+- **Thinking models** (glm-4.5-air, kimi): disable reasoning for the structured call or budget generous `max_tokens` — reasoning tokens are billed *outside* `max_tokens` and can leave visible content empty.
 - `existing_code`/`improved_code` enable GitHub ` ```suggestion ` blocks matched by **content** (robust to line drift), not by line number.
 - Two label modes (verbose vs critical-only) as a noise knob.
 - Put the large static system + custom-rules block at the **prompt prefix** to maximize automatic prefix-cache hits (DeepSeek/Kimi support implicit caching, ~3–5 min TTL).

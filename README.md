@@ -62,3 +62,11 @@ Managed GitHub App + webhook SaaS (the "managed flip") · codebase-graph/embeddi
 - [`docs/custom-rules.md`](docs/custom-rules.md) — config schema and how rules reach the model.
 - [`docs/security-and-ops.md`](docs/security-and-ops.md) — prompt injection, secret handling, rate limits, idempotency, observability.
 - [`docs/research-findings.md`](docs/research-findings.md) — full research across six dimensions, with sources.
+- [`docs/spike-openrouter-quota.md`](docs/spike-openrouter-quota.md) — live OpenRouter spike: 3-model cap, `require_parameters` landmine, structured-output reality, the daily-cap exhaustion result.
+- [`docs/spike-prompt-quality.md`](docs/spike-prompt-quality.md) — does the review actually work? Planted-issue eval: 0 false positives, 100% injection resistance, recall is the weak spot.
+
+## Scripts
+
+- [`scripts/quota-spike.sh`](scripts/quota-spike.sh) — reproducible OpenRouter free-model probes (availability, fallback, structured output).
+- [`scripts/quota-exhaust.py`](scripts/quota-exhaust.py) — **destructive** daily-cap exhaustion probe (burns the free daily quota).
+- [`scripts/prompt-quality-spike.py`](scripts/prompt-quality-spike.py) — seed eval harness: scores models on a planted-issue diff (recall / precision / injection).

@@ -8,7 +8,7 @@ Run 2026-06-02 against a real free ($0-credit, `is_free_tier: true`) OpenRouter 
 2. **Drop `require_parameters: true`.** Combined with `json_schema` it returns `404 "No endpoints found that can handle the requested parameters"` on **every** free model — it eliminates the entire free pool. (The original `model-strategy.md` recommended this exact combo; corrected.)
 3. **`gpt-oss-120b:free` is the only reliably-JSON free model.** Use it for the findings-generation (structured) call.
 4. **A defensive JSON parser is mandatory, not optional** — fenced output, empty content, and raw control characters were all observed in practice.
-5. **The free daily request counter (50/1000/day) is not observable** via any endpoint or header. "Share vs multiply" can only be settled by exhausting the cap.
+5. **The "50 requests/day" free cap did NOT reproduce.** A forced-fallback exhaustion run (~80 requests today, ~180 sub-attempts) on a $0 `is_free_tier` key never hit an account daily limit. The real binding constraint is **upstream provider saturation**, which the fallback array directly mitigates. See "Exhaustion run" below.
 
 ## Findings
 
@@ -62,11 +62,26 @@ Lead with the JSON-reliable reasoner; fall back to currently-serving models. `de
 
 (If pure code-reasoning quality matters more than JSON reliability for a given call, lead with `qwen/qwen3-coder:free` and lean harder on the defensive parser — a real tradeoff to decide per call type.)
 
-## Still open: share vs multiply
+## Exhaustion run (settles share-vs-multiply, in practice)
 
-Not yet settled (counter is unobservable). What we *do* know bounds the risk:
-- The array is capped at **3**, so worst case is **3×**, not the 5× the critique feared.
-- Dead-model (404) skips are cheap and may not count as provider attempts.
-- The mitigation is the same regardless of the answer: **minimize calls per PR, lead with the most-reliable model, and treat every request as potentially counting.**
+Ran `scripts/quota-exhaust.py` — 60 forced-fallback requests `[deepseek-v4-flash(dead 404), qwen3-coder, gpt-oss-120b]`, each fanning out to ~3 sub-attempts (≈180 provider attempts), on top of ~20 from earlier probes ≈ **~80 requests today** on a $0 `is_free_tier: true` key.
 
-A definitive answer needs a one-time **daily-cap exhaustion run** on this $0 key (burns the 50/day until midnight UTC). Pending owner go-ahead — see the run note in the chat.
+**Result: `hit_daily: False`.** No account daily-limit error ever appeared.
+
+```
+outcome counts: { SERVED: 58, ERR_503: 1, UPSTREAM_429: 1 }   (of 60)
+served-by:      { gpt-oss-120b:free: 58 }                      (qwen served 0/60)
+elapsed:        651s  (~10.85s/req; ~7.6s latency, fallthrough waits on qwen's 429)
+```
+
+**What this means:**
+- **The "50 requests/day" figure from secondary research did not reproduce.** With realistic 3× fan-out and ~80 requests, no daily cap. Either that number is outdated/wrong for mid-2026, or it isn't enforced as a simple per-request daily counter for these models. *The dreaded "fallback multiplies your 50/day and burns it instantly" risk did not materialize.*
+- **The fallback array is clearly net-positive, demonstrated live:** the lead coder (`qwen3-coder:free`) was upstream-saturated for the *entire* run (0/60), yet the array delivered a **97% success rate** by falling through to `gpt-oss-120b:free`. Without the array, this would have been a near-total outage.
+- **The operative constraint is upstream provider availability**, not the account quota: the only 2 failures were a `503 "No backends available"` (capacity) and one all-models-down `429`.
+- **Latency caveat:** forced fallthrough adds ~7s/request because it waits on the saturated lead model before advancing. In production, lead with a model that's actually serving (or probe liveness) to avoid paying this on every call.
+
+**Caveats / not fully closed:** ~80 requests is a modest sample; limits may be enforced over longer rolling windows, and the per-model **weekly token allocation** ceiling was not tested. Confirm the *current* official free-tier limits before launch, and keep the request-minimization discipline regardless. But the headline fear (immediate 50/day exhaustion from fan-out) is **not supported by the data**.
+
+## Recommendation
+
+Build the `models[]` fallback array (≤3) as the default — it's the single biggest reliability lever given how often free models are upstream-saturated. Do **not** over-engineer around a 50/day cap that didn't appear; do keep "one call per PR" discipline and liveness-aware lead-model selection (to dodge the fallthrough latency tax).

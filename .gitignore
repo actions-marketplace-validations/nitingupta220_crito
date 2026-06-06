@@ -1,20 +1,13 @@
-# Secrets — never commit
 .env
-.env.*
-*.pem
-*.key
-
-# Dependencies / build (for when code lands)
-node_modules/
-dist/
-build/
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
 .venv/
 venv/
-
-# OS / editor
+node_modules/
+*.egg-info/
+dist/
+build/
 .DS_Store
-.idea/
-.vscode/
-*.swp
+postgres_data/

@@ -33,7 +33,7 @@ jobs:
       # Checks out the BASE repo only (the action code). We never check out or
       # execute the PR head; the diff is fetched via the GitHub API.
       - name: Checkout action
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run review agent
         uses: ./

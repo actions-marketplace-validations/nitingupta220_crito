@@ -2,7 +2,7 @@
 
 An AI pull-request review agent that runs on the **user's own [OpenRouter](https://openrouter.ai) key (BYOK)**, defaulting to strong **free** coding/reasoning models. It reviews a GitHub PR for correctness, bugs, security, style, and design — driven by the model's general coding knowledge plus optional natural-language custom rules.
 
-> **Status:** design phase. No implementation yet. This repo currently holds the research and architecture findings that the build will follow.
+> **Status:** v1 shipped. The lean agent lives in [`prreview/`](prreview/) — a single-prompt, ≤3-model **union+dedup ensemble** (no multi-agent swarm, no server, no database). See [`docs/decision-accept-c.md`](docs/decision-accept-c.md) for why, and **Install** below to use it.
 
 ---
 
@@ -16,6 +16,35 @@ We are **not** building the expensive moat (codebase-graph/embeddings RAG, multi
 
 - **It's "~$10 one-time", not "$0".** Free OpenRouter models cap at **20 req/min and 50 req/day** until a one-time **$10 credit purchase** permanently raises the daily cap to **1000/day**. The 50/day tier is a demo tier, not a working tier for an active repo.
 - **"Free models" and "private code" are in tension.** Most `:free` models only route if the account allows training on prompt data. Forcing zero-data-retention (ZDR) may shrink the free pool to almost nothing. So per repo you choose: privacy or maximum-free.
+
+---
+
+## Install
+
+Add `.github/workflows/pr-review.yml` to your repo:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: nitingupta220/review-agent@v1
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Add your OpenRouter key as the repo secret `OPENROUTER_API_KEY` (Settings → Secrets and variables → Actions). Same-repo PRs auto-review; on a fork PR a maintainer comments `/review` to run it (forks get no secrets, so the run is maintainer-gated and `author_association`-checked). Zero-config works — optionally add `.pr-review.yaml` + `.pr-review/rules.md`.
+
+Default model chain (override via the `OPENROUTER_MODELS` env var or `.pr-review.yaml`): `openai/gpt-oss-120b:free`, `nvidia/nemotron-3-super-120b-a12b:free`, `google/gemma-4-31b-it:free` — verified serving 2026-06-13. The `:free` roster churns, so model IDs are runtime config, not hardcoded.
+
+Run the offline test suite with `python tests/test_smoke.py` (stdlib only).
 
 ---
 
@@ -56,6 +85,7 @@ Managed GitHub App + webhook SaaS (the "managed flip") · codebase-graph/embeddi
 
 ## Documents
 
+- [`docs/decision-accept-c.md`](docs/decision-accept-c.md) — **the build decision** (Option C): ship lean, salvage the spike-validated engine, discard the multi-agent server + dashboard + DB.
 - [`docs/architecture.md`](docs/architecture.md) — internal architecture, components, end-to-end flow, trigger matrix.
 - [`docs/decisions.md`](docs/decisions.md) — the three decisions, rationale, open questions, top risks.
 - [`docs/model-strategy.md`](docs/model-strategy.md) — OpenRouter model chain, fallback, structured output, privacy mechanics.

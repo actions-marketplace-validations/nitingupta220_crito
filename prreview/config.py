@@ -51,11 +51,11 @@ class Config:
     models: list
     profile: str = "chill"
     privacy_mode: str = "zdr"
-    ignore: list = field(default_factory=tuple)
+    ignore: list = field(default_factory=list)
     max_diff_chars: int = 60000
     max_files: int = 60
     max_findings: int = 30
-    custom_rules = None
+    custom_rules: "str | None" = None
 
 
 def _cap_models(models) -> list:

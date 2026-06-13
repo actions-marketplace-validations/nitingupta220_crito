@@ -104,9 +104,11 @@ class FakeClient:
         self.models = list(models)
         self._findings = findings
 
-    async def chat_json(self, system=None, user=None, max_tokens=None, response_format=None):
-        # Attribute the result to whatever single model the ensemble pinned.
-        served = self.models[0] if self.models else "fake/model"
+    async def chat_json(self, system=None, user=None, max_tokens=None,
+                        response_format=None, models=None):
+        # The ensemble now pins one model per call via the models= override
+        # (no shared-state mutation), so attribute the result to that.
+        served = (models or self.models or ["fake/model"])[0]
         # Return a deep-ish copy so callers can't mutate our canned data.
         return {"findings": [dict(f) for f in self._findings]}, served
 

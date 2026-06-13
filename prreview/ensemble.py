@@ -40,25 +40,19 @@ def _confidence(finding: dict) -> float:
 async def _one_model(client, model: str, system: str, user: str, response_format):
     """Run the shared prompt against a single model; return its findings list.
 
-    Sends ONLY this one model so the served result is attributable to it (the
-    client's models[] array is used for provider-side fallback within a call,
-    but for the ensemble we want one explicit model per call). Tolerant of every
-    failure mode: a model that errors, returns None, or returns a non-dict simply
-    contributes zero findings rather than failing the whole review.
+    Passes this one model explicitly via the ``models`` override so the served
+    result is attributable to it AND concurrent ensemble calls never race on
+    shared client state (the calls run under ``asyncio.gather``). Tolerant of
+    every failure mode: a model that errors, returns None, or returns a non-dict
+    simply contributes zero findings rather than failing the whole review.
     """
     try:
-        # Temporarily pin the client to this single model so attribution and the
-        # served result line up. The client truncates/copies internally.
-        original_models = client.models
-        try:
-            client.models = [model]
-            parsed, served_model = await client.chat_json(
-                system=system,
-                user=user,
-                response_format=response_format,
-            )
-        finally:
-            client.models = original_models
+        parsed, served_model = await client.chat_json(
+            system=system,
+            user=user,
+            response_format=response_format,
+            models=[model],
+        )
     except Exception:
         # Network error, HTTP error after retries, etc. This model abstains.
         return []

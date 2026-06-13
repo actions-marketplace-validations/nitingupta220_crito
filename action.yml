@@ -1,0 +1,52 @@
+name: "PR Review Agent"
+description: >-
+  Zero-infra, BYOK PR reviewer. Reads a pull-request diff via the GitHub API,
+  reviews it with free OpenRouter models, and posts ONE batched review.
+  Pure read-and-comment: it never checks out, builds, or executes PR/fork code.
+author: "nitingupta220"
+
+branding:
+  icon: "eye"
+  color: "purple"
+
+inputs:
+  openrouter_api_key:
+    description: "OpenRouter API key (BYOK). Pass via secrets.OPENROUTER_API_KEY."
+    required: true
+  github_token:
+    description: >-
+      Token used to read the PR diff and post the review. Normally the
+      automatic secrets.GITHUB_TOKEN; needs pull-requests:write + contents:read.
+    required: true
+  openrouter_models:
+    description: >-
+      Optional comma-separated OpenRouter model slugs (max 3 are used). Overrides
+      the .pr-review.yaml / defaults. Example:
+      "openai/gpt-oss-120b:free,qwen/qwen3-coder:free,z-ai/glm-4.5-air:free".
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      shell: bash
+      run: python -m pip install --disable-pip-version-check -r "${{ github.action_path }}/requirements.txt"
+
+    - name: Run PR review agent
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        # Secrets are passed through to the agent process only — never logged.
+        OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        OPENROUTER_MODELS: ${{ inputs.openrouter_models }}
+        # github.action_path holds the prreview/ package; make it importable
+        # regardless of the consumer's checkout layout.
+        PYTHONPATH: ${{ github.action_path }}
+      run: python -m prreview.review

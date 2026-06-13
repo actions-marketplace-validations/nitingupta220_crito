@@ -1,0 +1,10 @@
+# review-agent runtime dependencies (BYOK GitHub Action, zero-infra).
+# Deliberately minimal: no FastAPI / uvicorn / SQLAlchemy / database / frontend.
+# The agent only reads a PR diff via the GitHub API and posts one batched review.
+
+httpx>=0.27,<1.0      # async HTTP client for OpenRouter + GitHub REST
+pyyaml>=6.0,<7.0      # parses optional .pr-review.yaml (imported lazily in config)
+
+# --- optional dev/test extras (not installed by the action) ---
+# pytest>=8.0          # `pip install pytest` to run the test suite locally;
+#                      # the stdlib-only smoke test runs without it.

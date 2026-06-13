@@ -179,11 +179,17 @@ class GitHubClient:
         every anchor against ``valid_anchors`` before calling this. The summary
         ``body`` is posted with no inline comments when ``comments`` is empty.
         """
+        normalized = [self._normalize_comment(c) for c in (comments or [])]
+        # Drop any comment we could not anchor to a concrete file + line; a
+        # null/relative anchor would 422 the whole atomic review.
+        inline = [
+            c for c in normalized if c.get("path") and c.get("line") is not None
+        ]
         payload = {
             "commit_id": commit_id,
             "body": body,
             "event": "COMMENT",
-            "comments": [self._normalize_comment(c) for c in (comments or [])],
+            "comments": inline,
         }
         resp = self._client.post(
             self._repo_path(f"/pulls/{pr}/reviews"),
@@ -208,12 +214,18 @@ class GitHubClient:
             line = c.get("end_line", c.get("start_line"))
         body = c.get("body") or c.get("comment") or ""
         side = c.get("side") or "RIGHT"
-        # Single-line anchor only. A multi-line range (start_line + line) is
-        # rejected with an atomic 422 whenever the two endpoints fall in
-        # different diff hunks — and because the reviews endpoint is atomic, one
-        # such comment kills the whole batched review. A single new-side line is
-        # far more robust and the reference-line anchor is what carries meaning.
-        return {"path": path, "line": int(line), "side": side, "body": body}
+        # Coerce the anchor line defensively: a finding with a missing or
+        # non-numeric line yields line=None so callers can DROP it rather than
+        # raising on int(None). Single-line anchor only — a multi-line range
+        # (start_line + line) hits an atomic 422 when the endpoints fall in
+        # different hunks, and the reviews endpoint is atomic, so one bad comment
+        # kills the whole batched review. A single new-side line is robust and is
+        # exactly what the reference-line anchor carries.
+        try:
+            line_int = int(line)
+        except (TypeError, ValueError):
+            line_int = None
+        return {"path": path, "line": line_int, "side": side, "body": body}
 
     def post_inline_comment(self, pr: int, commit_id: str, comment: dict) -> bool:
         """Post ONE standalone inline review comment; return True on success.

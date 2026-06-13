@@ -239,6 +239,7 @@ class OpenRouterClient:
         user: str,
         max_tokens=None,
         response_format=None,
+        models=None,
     ) -> tuple:
         """
         Send (system, user) to the models[] array and return parsed JSON.
@@ -246,21 +247,24 @@ class OpenRouterClient:
         Returns:
             (parsed_obj_or_None, served_model_id)
 
-        - Sends the full models[] fallback array (already capped at <=3).
+        - Uses ``models`` when given (capped at <=3), else the client's default
+          array. Passing it explicitly lets concurrent callers (the ensemble)
+          pin a single model per call WITHOUT mutating shared client state.
         - response_format is forwarded best-effort (a hint). require_parameters
           is NEVER sent.
         - Output budget is clamped via _safe_max_tokens (4096 floor, thinking-model
           bump) so glm/kimi don't return empty content.
         - Returns (None, served_model) on empty content or unrecoverable JSON.
         """
-        if not self.models:
+        selected = list(models)[:MAX_MODELS] if models else self.models
+        if not selected:
             raise ValueError("OpenRouterClient: models list must not be empty")
 
-        lead_model = self.models[0]
+        lead_model = selected[0]
         safe_tokens = _safe_max_tokens(lead_model, max_tokens)
 
         payload: dict = {
-            "models": self.models,
+            "models": selected,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},

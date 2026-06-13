@@ -36,7 +36,7 @@ jobs:
       # Default branch checkout (base repo / action code only). The fork's head
       # is never fetched or run here.
       - name: Checkout action
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run review agent
         uses: ./

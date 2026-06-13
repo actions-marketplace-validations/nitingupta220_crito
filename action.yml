@@ -22,7 +22,7 @@ inputs:
     description: >-
       Optional comma-separated OpenRouter model slugs (max 3 are used). Overrides
       the .pr-review.yaml / defaults. Example:
-      "openai/gpt-oss-120b:free,qwen/qwen3-coder:free,z-ai/glm-4.5-air:free".
+      "openai/gpt-oss-120b:free,nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free".
     required: false
     default: ""
 
@@ -30,7 +30,7 @@ runs:
   using: "composite"
   steps:
     - name: Set up Python 3.11
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.11"
 

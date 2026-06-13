@@ -1,124 +1,102 @@
-# 🤖 AI PR Review Assistant
+# review-agent
 
-A production-ready, multi-agent AI system that automatically reviews GitHub Pull Requests — an open-source alternative to GitHub Copilot PR Reviews.
+An AI pull-request review agent that runs on the **user's own [OpenRouter](https://openrouter.ai) key (BYOK)**, defaulting to strong **free** coding/reasoning models. It reviews a GitHub PR for correctness, bugs, security, style, and design — driven by the model's general coding knowledge plus optional natural-language custom rules.
 
-## ✅ What's Built
+> **Status:** v1 shipped. The lean agent lives in [`prreview/`](prreview/) — a single-prompt, ≤3-model **union+dedup ensemble** (no multi-agent swarm, no server, no database). See [`docs/decision-accept-c.md`](docs/decision-accept-c.md) for why, and **Install** below to use it.
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| FastAPI server | ✅ | Async, auto-reload, OpenAPI docs at `/docs` |
-| GitHub webhook | ✅ | HMAC-SHA256 signature verification |
-| GitHub service | ✅ | Fetch PR diff, files, metadata; post comments |
-| OpenRouter service | ✅ | LLM gateway with retry + JSON parsing |
-| Security Agent | ✅ | OWASP Top 10, secrets, injection flaws |
-| Bug Detection Agent | ✅ | Logic errors, null deref, race conditions |
-| Performance Agent | ✅ | N+1 queries, algorithm complexity, memory |
-| Code Quality Agent | ✅ | SOLID, DRY, naming, complexity |
-| Documentation Agent | ✅ | Docstrings, type hints, README gaps |
-| Aggregator Agent | ✅ | Synthesizes all reports → single GitHub comment |
-| Static Analysis | ✅ | Bandit (security) + Pylint (quality) on diff |
-| Pipeline Orchestrator | ✅ | Parallel agents + static analysis + DB persist |
-| Reviews REST API | ✅ | `GET /reviews/`, `GET /reviews/{id}`, `POST /reviews/trigger` |
-| DB Schema | ✅ | PullRequest, Review, AgentOutput, Finding |
+---
 
-## 🚀 Quick Start (Local)
+## The thesis
 
-```bash
-# 1. Activate venv
-.\venv\Scripts\activate
+Every incumbent — CodeRabbit ($12–24/seat), Qodo (~$19), Graphite ($20–40), Bito ($15–25) — charges per-seat for what is fundamentally a **diff-compression → structured-LLM-call → post-comment** pipeline. We eliminate the inference cost by running on the user's own OpenRouter key against free coding models (Qwen3-Coder, DeepSeek V4 Flash, Kimi K2.6, GLM-4.5-Air). Shipping as a **self-hosted GitHub Action** means the user's code and key never touch our servers — that's both the trust story and a zero-infra story for us.
 
-# 2. Start the server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+We are **not** building the expensive moat (codebase-graph/embeddings RAG, multi-agent swarms, 40+ bundled linters). We win on price and on a tight, low-false-positive review of the diff, customizable via natural-language rules.
+
+### Two honest caveats
+
+- **It's "~$10 one-time", not "$0".** Free OpenRouter models cap at **20 req/min and 50 req/day** until a one-time **$10 credit purchase** permanently raises the daily cap to **1000/day**. The 50/day tier is a demo tier, not a working tier for an active repo.
+- **"Free models" and "private code" are in tension.** Most `:free` models only route if the account allows training on prompt data. Forcing zero-data-retention (ZDR) may shrink the free pool to almost nothing. So per repo you choose: privacy or maximum-free.
+
+---
+
+## Install
+
+Add `.github/workflows/pr-review.yml` to your repo:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: nitingupta220/review-agent@v1
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Server runs at: http://localhost:8000  
-API docs at: http://localhost:8000/docs
+Add your OpenRouter key as the repo secret `OPENROUTER_API_KEY` (Settings → Secrets and variables → Actions). Same-repo PRs auto-review; on a fork PR a maintainer comments `/review` to run it (forks get no secrets, so the run is maintainer-gated and `author_association`-checked). Zero-config works — optionally add `.pr-review.yaml` + `.pr-review/rules.md`.
 
-## 🔗 Connecting GitHub Webhook
+Default model chain (override via the `OPENROUTER_MODELS` env var or `.pr-review.yaml`): `openai/gpt-oss-120b:free`, `nvidia/nemotron-3-super-120b-a12b:free`, `google/gemma-4-31b-it:free` — verified serving 2026-06-13. The `:free` roster churns, so model IDs are runtime config, not hardcoded.
 
-### Option A — Use ngrok (recommended for local dev)
-```bash
-# Install ngrok from https://ngrok.com/download
-ngrok http 8000
-```
-Copy the HTTPS URL (e.g. `https://abc123.ngrok.io`)
+Run the offline test suite with `python tests/test_smoke.py` (stdlib only).
 
-### Option B — Deploy to a server
-Deploy the app to any server with a public IP.
+---
 
-### Set up the webhook on GitHub
-1. Go to your repo → **Settings** → **Webhooks** → **Add webhook**
-2. **Payload URL:** `https://YOUR_URL/webhook/github`
-3. **Content type:** `application/json`
-4. **Secret:** `360ai` (from your `.env`)
-5. **Events:** Select **"Pull requests"** only
-6. Click **Add webhook**
+## v1 scope (code review only)
 
-Now open or update any PR — the review will be posted automatically as a comment!
+- Published **GitHub Action** installed via a ~15-line workflow; `OPENROUTER_API_KEY` lives in the user's repo secrets; we custody nothing.
+- Triggers: `pull_request` (auto-review on same-repo PRs) + a maintainer `/review` comment (the only secret-safe path for forked PRs).
+- Diff ingest → ignore-glob filter → **secret pre-scan + redaction** → reference-line-number injection → compression-to-one-call → OpenRouter (`models[]` fallback + `json_schema`) → parse/repair → anchor-validate + dedup + gate → **one batched GitHub Review + one persistent summary comment**, with incremental review on new pushes.
+- Two-file config: `.pr-review.yaml` (settings) + `.pr-review/rules.md` (natural-language rules), glob-matched into the prompt.
+- Security posture: agent is **pure read-and-comment with zero write/merge/exec** — neutralizes prompt injection from PR content.
 
-## 🧪 Manual Trigger (no webhook needed)
+## Explicitly deferred to later
 
-```bash
-curl -X POST http://localhost:8000/reviews/trigger \
-  -H "Content-Type: application/json" \
-  -d '{"repo": "owner/repo-name", "pr_number": 1}'
-```
+Managed GitHub App + webhook SaaS (the "managed flip") · codebase-graph/embeddings RAG · learnings/memory loop · hybrid deterministic linters (semgrep/eslint/ruff) · `/describe` and `/ask` commands · GitLab/Bitbucket providers · auto-fix-commit · self-reflection re-scoring pass.
 
-## 📁 Project Structure
+---
 
-```
-PR review/
-├── app/
-│   ├── agents/
-│   │   ├── base_agent.py          # Abstract base for all agents
-│   │   ├── security_agent.py      # OWASP + secrets detection
-│   │   ├── bug_agent.py           # Logic errors + runtime bugs
-│   │   ├── performance_agent.py   # N+1, memory, complexity
-│   │   ├── quality_agent.py       # SOLID, DRY, naming
-│   │   ├── docs_agent.py          # Docstrings, type hints
-│   │   └── aggregator_agent.py    # Final synthesis agent
-│   ├── services/
-│   │   ├── github_service.py      # GitHub API client
-│   │   ├── openrouter_service.py  # LLM gateway
-│   │   ├── static_analysis_service.py  # Bandit + Pylint
-│   │   └── pipeline_service.py    # Main orchestrator
-│   ├── routers/
-│   │   ├── webhook.py             # POST /webhook/github
-│   │   └── reviews.py             # GET/POST /reviews/
-│   ├── models/
-│   │   └── db_models.py           # SQLAlchemy models
-│   ├── config.py                  # Pydantic settings
-│   ├── database.py                # Async SQLAlchemy
-│   └── main.py                    # FastAPI app
-├── .env                           # Your secrets (never commit!)
-├── .env.example                   # Safe template
-├── requirements.txt
-├── Dockerfile
-└── docker-compose.yml
-```
+## Direction decisions (soft — subject to revision)
 
-## 🤖 AI Models Used
+| Decision | Choice | Why |
+|---|---|---|
+| Target repos | **OSS too, maintainer-gated** | Same-repo PRs auto-review; forked PRs reviewed only when a trusted maintainer comments `/review` (forks get no secrets; `pull_request_target` is banned as the pwn-request RCE vector). |
+| Privacy | **ZDR default + opt-in community mode** | Safe-by-default for proprietary code; user explicitly widens the free pool. ZDR-strict with zero providers → fail loudly, never silently route to a training provider. |
+| Distribution | **GitHub Action first** | Zero infra, zero key custody. The GitHub App is the v2 "managed flip". |
 
-| Agent | Model |
-|-------|-------|
-| Security | `deepseek/deepseek-r1` |
-| Bug Detection | `deepseek/deepseek-chat-v3-0324` |
-| Performance | `qwen/qwen3-coder` |
-| Code Quality | `deepseek/deepseek-chat-v3-0324` |
-| Documentation | `meta-llama/llama-4-maverick` |
-| Aggregator | `deepseek/deepseek-r1` |
+---
 
-All configurable in `.env`.
+## Recommended build sequence
 
-## 🗄️ Database (Optional)
+1. **Diff → findings core** (no GitHub): ingest fixture diff → filter → reference-line-number injection → compress → OpenRouter call → parse/repair → gated findings. **Spike first:** verify the `GET /api/v1/key` quota-sharing question before committing to the fallback array as default.
+2. **GitHub adapter**: `GET /pulls/{n}/files` → hunk-anchor index → batched `POST /pulls/{n}/reviews` + persistent summary comment + `last_reviewed_sha` marker.
+3. **Action packaging + same-repo auto-review** end-to-end on a private test repo.
+4. **OSS gate**: the `issue_comment` `/review` workflow + authorization check + "comment to review" hint on fork PRs.
+5. **Config + custom rules**: `.pr-review.yaml` + `.pr-review/rules.md`, chill default profile.
+6. **Secret pre-scan + privacy defaults + telemetry**.
 
-The system runs fully without a database. When PostgreSQL is available, it persists all reviews, agent outputs, and findings for querying via the `/reviews/` API.
+---
 
-To set up PostgreSQL:
-```bash
-# Update .env with your PostgreSQL credentials
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/prreviewdb
+## Documents
 
-# Or use Docker Compose
-docker compose up db -d
-```
+- [`docs/decision-accept-c.md`](docs/decision-accept-c.md) — **the build decision** (Option C): ship lean, salvage the spike-validated engine, discard the multi-agent server + dashboard + DB.
+- [`docs/architecture.md`](docs/architecture.md) — internal architecture, components, end-to-end flow, trigger matrix.
+- [`docs/decisions.md`](docs/decisions.md) — the three decisions, rationale, open questions, top risks.
+- [`docs/model-strategy.md`](docs/model-strategy.md) — OpenRouter model chain, fallback, structured output, privacy mechanics.
+- [`docs/custom-rules.md`](docs/custom-rules.md) — config schema and how rules reach the model.
+- [`docs/security-and-ops.md`](docs/security-and-ops.md) — prompt injection, secret handling, rate limits, idempotency, observability.
+- [`docs/research-findings.md`](docs/research-findings.md) — full research across six dimensions, with sources.
+- [`docs/spike-openrouter-quota.md`](docs/spike-openrouter-quota.md) — live OpenRouter spike: 3-model cap, `require_parameters` landmine, structured-output reality, the daily-cap exhaustion result.
+- [`docs/spike-prompt-quality.md`](docs/spike-prompt-quality.md) — does the review actually work? Planted-issue eval: 0 false positives, 100% injection resistance, recall is the weak spot.
+
+## Scripts
+
+- [`scripts/quota-spike.sh`](scripts/quota-spike.sh) — reproducible OpenRouter free-model probes (availability, fallback, structured output).
+- [`scripts/quota-exhaust.py`](scripts/quota-exhaust.py) — **destructive** daily-cap exhaustion probe (burns the free daily quota).
+- [`scripts/prompt-quality-spike.py`](scripts/prompt-quality-spike.py) — seed eval harness: scores models on a planted-issue diff (recall / precision / injection).

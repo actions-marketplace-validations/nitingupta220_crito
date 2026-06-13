@@ -1,0 +1,45 @@
+name: PR Review Command
+
+# Triggered by a "/review" comment on a pull request. `issue_comment` always
+# runs from the DEFAULT branch with the base repo's secrets (OPENROUTER_API_KEY),
+# which is exactly what we need so fork PRs can be reviewed on demand.
+#
+# SECURITY: even though this has access to base secrets, fork code is NEVER
+# checked out or executed. We only check out the base repo (the action itself)
+# and the agent reads the PR diff through the GitHub API. The composite action
+# additionally enforces author_association / collaborator-permission authz, so a
+# random fork author cannot use "/review" to drain the OpenRouter quota.
+on:
+  issue_comment:
+    types: [created]
+
+# Least privilege: post the review, read the repo. No write to contents.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-review-cmd-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review on /review command
+    runs-on: ubuntu-latest
+    # Guard: the comment must be on a PR (not a plain issue) and must start
+    # with "/review". Authorization of the commenter is enforced inside the
+    # action via author_association + collaborator permission.
+    if: >-
+      ${{ github.event.issue.pull_request &&
+          startsWith(github.event.comment.body, '/review') }}
+    steps:
+      # Default branch checkout (base repo / action code only). The fork's head
+      # is never fetched or run here.
+      - name: Checkout action
+        uses: actions/checkout@v4
+
+      - name: Run review agent
+        uses: ./
+        with:
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

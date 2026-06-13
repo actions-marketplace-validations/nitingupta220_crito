@@ -1,57 +1,42 @@
-name: 🤖 AI PR Review
+name: PR Review
 
+# SECURITY: this trigger is intentionally `pull_request`, NEVER
+# `pull_request_target`. `pull_request_target` runs in the context of the BASE
+# repo with read/write secrets while checking out UNTRUSTED fork code — the
+# classic "pwn-request" privilege-escalation hole. Because this agent only ever
+# READS the diff through the GitHub API (it never checks out or executes PR
+# code), plain `pull_request` is correct and safe. For pushes from forks the
+# automatic GITHUB_TOKEN is read-only and OPENROUTER_API_KEY is not exposed, so
+# the inline review is skipped; fork PRs are reviewed via the `/review` command
+# workflow (pr-review-command.yml), which still never runs fork code.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  issue_comment:
-    types: [created]
 
+# Least privilege: read the repo/diff, write PR review comments. Nothing else.
 permissions:
   contents: read
   pull-requests: write
 
+# One review per PR head at a time; cancel superseded runs on new pushes.
 concurrency:
-  group: ai-pr-review-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: pr-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   review:
-    name: AI Code Review
+    name: Review diff
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'pull_request') ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '/review'))
-
+    # Skip draft PRs until they are marked ready for review.
+    if: ${{ github.event.pull_request.draft == false }}
     steps:
-      - name: Checkout repository
+      # Checks out the BASE repo only (the action code). We never check out or
+      # execute the PR head; the diff is fetched via the GitHub API.
+      - name: Checkout action
         uses: actions/checkout@v4
+
+      - name: Run review agent
+        uses: ./
         with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 1
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: action_requirements.txt
-
-      - name: Install dependencies
-        run: pip install -r action_requirements.txt
-
-      - name: Run AI PR Review
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          FREE_MODEL_CHAIN: ${{ vars.FREE_MODEL_CHAIN || 'qwen/qwen3-235b-a22b:free,google/gemma-3-27b-it:free,mistralai/mistral-7b-instruct:free' }}
-        run: python scripts/action_review.py
-
-      - name: Upload debug logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr-review-logs
-          path: "*.log"
-          retention-days: 7
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

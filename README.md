@@ -8,7 +8,7 @@ An AI pull-request review agent that runs on the **user's own [OpenRouter](https
 
 ## The thesis
 
-Every incumbent — CodeRabbit ($12–24/seat), Qodo (~$19), Graphite ($20–40), Bito ($15–25) — charges per-seat for what is fundamentally a **diff-compression → structured-LLM-call → post-comment** pipeline. We eliminate the inference cost by running on the user's own OpenRouter key against free coding models (Qwen3-Coder, DeepSeek V4 Flash, Kimi K2.6, GLM-4.5-Air). Shipping as a **self-hosted GitHub Action** means the user's code and key never touch our servers — that's both the trust story and a zero-infra story for us.
+Every incumbent — CodeRabbit ($12–24/seat), Qodo (~$19), Graphite ($20–40), Bito ($15–25) — charges per-seat for what is fundamentally a **diff-compression → structured-LLM-call → post-comment** pipeline. We eliminate the inference cost by running on the user's own OpenRouter key against free coding models (current defaults: `openai/gpt-oss-120b:free`, `nvidia/nemotron-3-super-120b-a12b:free`, `google/gemma-4-31b-it:free` — verified live; the `:free` roster churns, so model IDs are runtime config, overridable via `OPENROUTER_MODELS` / `.pr-review.yaml`). Shipping as a **self-hosted GitHub Action** means the user's code and key never touch our servers — that's both the trust story and a zero-infra story for us.
 
 We are **not** building the expensive moat (codebase-graph/embeddings RAG, multi-agent swarms, 40+ bundled linters). We win on price and on a tight, low-false-positive review of the diff, customizable via natural-language rules.
 

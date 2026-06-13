@@ -39,8 +39,10 @@ _THINKING_MODEL_PATTERNS = ("glm", "kimi", "o1", "o3", "deepseek-r1")
 _THINKING_MIN_TOKENS = 8192
 
 # Floor for ANY request's output budget. Below this, even non-thinking free
-# models truncate structured JSON mid-array.
-_MAX_TOKENS_FLOOR = 4096
+# models truncate the structured-JSON findings array mid-stream on a large diff
+# (finish_reason="length" -> unparseable -> the model silently contributes zero
+# findings). 8192 leaves headroom for a full ~30-finding review with suggestions.
+_MAX_TOKENS_FLOOR = 8192
 
 # Retry policy for transient throttling (429) / unavailability (503).
 # Small cap on purpose: the models[] array is the primary fallback mechanism,

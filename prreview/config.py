@@ -26,12 +26,15 @@ from dataclasses import dataclass, field
 
 # Live-verified free defaults (2026-06-02 spike):
 #   * gpt-oss-120b  — the only reliably JSON-clean free model; leads the chain.
-#   * qwen3-coder   — strongest free coder.
-#   * glm-4.5-air   — thinking model; capable but needs large max_tokens.
+# Verified serving 2026-06-13 against a live free key. The :free roster churns
+# (z-ai/glm-4.5-air:free now 404s "use the paid slug"; qwen/qwen3-coder:free is
+# upstream-saturated/429), so these are chosen for liveness + lineage diversity
+# (OpenAI / NVIDIA / Google => different blind spots => better union recall).
+# Always overridable via the OPENROUTER_MODELS env var or .pr-review.yaml.
 DEFAULT_MODELS = [
-    "openai/gpt-oss-120b:free",
-    "qwen/qwen3-coder:free",
-    "z-ai/glm-4.5-air:free",
+    "openai/gpt-oss-120b:free",                 # reliable pure-JSON lead
+    "nvidia/nemotron-3-super-120b-a12b:free",   # 1M ctx, serving
+    "google/gemma-4-31b-it:free",               # 262k ctx, serving
 ]
 
 

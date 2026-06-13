@@ -229,10 +229,27 @@ def _build_summary_body(findings: list, head_sha: str, served_models: list,
         lines.append("")
         lines.append(f"_Models: {', '.join(served_models)}_")
 
-    lines.append("")
-    lines.append(_SUMMARY_MARKER)
-    lines.append(f"{_SHA_MARKER_PREFIX}{head_sha}{_SHA_MARKER_SUFFIX}")
     return "\n".join(lines)
+
+
+def _summary_markers(head_sha: str) -> str:
+    """The hidden HTML-comment marker block (identity + last-reviewed SHA).
+
+    Appended to the summary AFTER sanitization: ``sanitize_comment`` strips HTML
+    comments, so baking these into the pre-sanitized body silently deletes them —
+    which breaks incremental-skip and leaves a duplicate summary comment on every
+    run. Keeping them out of the sanitized text preserves the sticky marker.
+    """
+    return f"{_SUMMARY_MARKER}\n{_SHA_MARKER_PREFIX}{head_sha}{_SHA_MARKER_SUFFIX}"
+
+
+def _render_summary(findings: list, head_sha: str, served_models: list,
+                    skipped: list, secret_count: int) -> str:
+    """Build the visible summary, sanitize it, then append the hidden markers."""
+    visible = _build_summary_body(
+        findings, head_sha, served_models, skipped, secret_count
+    )
+    return sanitize.sanitize_comment(visible) + "\n\n" + _summary_markers(head_sha)
 
 
 # ---------------------------------------------------------------------------
@@ -439,12 +456,11 @@ async def run(event: dict, env: dict) -> int:
         if not rendered_diff.strip() and not anchored_secret_findings:
             # Nothing reviewable (all binary/ignored/deletions). Record the SHA so
             # we don't keep re-fetching, and exit cleanly.
-            summary = _build_summary_body(
-                [], head_sha, [], skipped, len(secret_findings)
-            )
             try:
                 gh.upsert_summary_comment(
-                    pr_number, sanitize.sanitize_comment(summary), _SUMMARY_MARKER
+                    pr_number,
+                    _render_summary([], head_sha, [], skipped, len(secret_findings)),
+                    _SUMMARY_MARKER,
                 )
             except Exception:
                 pass
@@ -508,10 +524,9 @@ async def run(event: dict, env: dict) -> int:
 
         # ── Summary comment (also sanitized) ───────────────────────────────
         total_secret_count = len(anchored_secret_findings) + unanchored_secret_count
-        summary_body = _build_summary_body(
+        safe_summary = _render_summary(
             finalized, head_sha, served_models, skipped, total_secret_count
         )
-        safe_summary = sanitize.sanitize_comment(summary_body)
 
         # ── Post: ONE batched review + sticky summary ──────────────────────
         review_posted = False
@@ -520,11 +535,26 @@ async def run(event: dict, env: dict) -> int:
                 gh.post_review(pr_number, head_sha, safe_summary, inline_comments)
                 review_posted = True
             except Exception as exc:
-                # The reviews endpoint is atomic: one bad anchor rejects all of
-                # it (422). Fall back to a summary-only comment so the run still
-                # surfaces something instead of dying.
+                # The reviews endpoint is atomic: one bad anchor rejects ALL of
+                # it (422). Surface GitHub's specific reason, then fall back to
+                # posting each inline comment independently so the valid ones
+                # still land instead of losing the whole review to one bad anchor.
+                detail = ""
+                resp = getattr(exc, "response", None)
+                if resp is not None:
+                    try:
+                        detail = resp.text[:600]
+                    except Exception:
+                        detail = ""
+                fallback_posted = 0
+                for c in inline_comments:
+                    if gh.post_inline_comment(pr_number, head_sha, c):
+                        fallback_posted += 1
+                if fallback_posted:
+                    review_posted = True
                 _telemetry(event="warn", reason="batched_review_failed",
-                           pr=pr_number, error=type(exc).__name__)
+                           pr=pr_number, error=type(exc).__name__, detail=detail,
+                           fallback_posted=fallback_posted)
         if not review_posted:
             gh.upsert_summary_comment(pr_number, safe_summary, _SUMMARY_MARKER)
         else:

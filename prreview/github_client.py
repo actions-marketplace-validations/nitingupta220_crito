@@ -208,14 +208,40 @@ class GitHubClient:
             line = c.get("end_line", c.get("start_line"))
         body = c.get("body") or c.get("comment") or ""
         side = c.get("side") or "RIGHT"
-        out = {"path": path, "line": int(line), "side": side, "body": body}
-        # Carry an explicit multi-line range when both endpoints are present
-        # and span more than one line (GitHub multi-line comment support).
-        start = c.get("start_line")
-        if start is not None and int(start) < int(line):
-            out["start_line"] = int(start)
-            out["start_side"] = c.get("start_side") or side
-        return out
+        # Single-line anchor only. A multi-line range (start_line + line) is
+        # rejected with an atomic 422 whenever the two endpoints fall in
+        # different diff hunks — and because the reviews endpoint is atomic, one
+        # such comment kills the whole batched review. A single new-side line is
+        # far more robust and the reference-line anchor is what carries meaning.
+        return {"path": path, "line": int(line), "side": side, "body": body}
+
+    def post_inline_comment(self, pr: int, commit_id: str, comment: dict) -> bool:
+        """Post ONE standalone inline review comment; return True on success.
+
+        Fallback for when the atomic batched ``post_review`` is rejected (422)
+        because a single comment anchors outside the diff: posting each comment
+        independently via ``POST /pulls/{n}/comments`` lets the valid ones land
+        while only the genuinely-bad anchor is dropped. Never raises — a failed
+        comment simply returns False so the caller can keep going.
+        """
+        c = self._normalize_comment(comment)
+        if not c.get("path") or c.get("line") is None:
+            return False
+        payload = {
+            "body": c["body"],
+            "commit_id": commit_id,
+            "path": c["path"],
+            "line": c["line"],
+            "side": c["side"],
+        }
+        try:
+            resp = self._client.post(
+                self._repo_path(f"/pulls/{pr}/comments"), json=payload
+            )
+            resp.raise_for_status()
+            return True
+        except httpx.HTTPError:
+            return False
 
     def upsert_summary_comment(self, pr: int, body: str, marker: str) -> dict:
         """Create or update the single sticky summary comment.

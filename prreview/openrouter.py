@@ -19,10 +19,10 @@ Spike-validated design (lifted from the original service, re-expressed standalon
 - 429 / 503 -> exponential backoff + jitter, bounded by a small retry cap.
 - The actual served model is read from the response `model` field and returned.
 """
+import asyncio
 import json
 import random
 import re
-import time
 from typing import Optional
 
 import httpx
@@ -197,11 +197,11 @@ class OpenRouterClient:
                     last_exc = exc
                     if attempt >= _MAX_RETRIES - 1:
                         raise
-                    self._sleep_backoff(attempt)
+                    await asyncio.sleep(self._backoff_delay(attempt))
                     continue
 
                 if resp.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
-                    self._sleep_backoff(attempt, resp)
+                    await asyncio.sleep(self._backoff_delay(attempt, resp))
                     continue
 
                 resp.raise_for_status()
@@ -213,8 +213,14 @@ class OpenRouterClient:
         raise httpx.HTTPError("chat completion failed after retries")
 
     @staticmethod
-    def _sleep_backoff(attempt: int, resp: "Optional[httpx.Response]" = None) -> None:
-        """Exponential backoff with jitter; honor Retry-After when present."""
+    def _backoff_delay(attempt: int, resp: "Optional[httpx.Response]" = None) -> float:
+        """Compute an exponential-backoff delay (seconds) with jitter.
+
+        Honors a ``Retry-After`` header when present. Returns the delay so the
+        async caller can ``await asyncio.sleep`` on it — we must never block the
+        event loop with ``time.sleep`` here, since the ensemble fans several of
+        these requests out concurrently.
+        """
         delay = min(_BACKOFF_CAP, _BACKOFF_BASE * (2 ** attempt))
         if resp is not None:
             retry_after = resp.headers.get("retry-after")
@@ -223,8 +229,7 @@ class OpenRouterClient:
                     delay = min(_BACKOFF_CAP, float(retry_after))
                 except (TypeError, ValueError):
                     pass
-        delay += random.uniform(0, delay * 0.25)  # jitter
-        time.sleep(delay)
+        return delay + random.uniform(0, delay * 0.25)  # jitter
 
     # -- public API ----------------------------------------------------------
 

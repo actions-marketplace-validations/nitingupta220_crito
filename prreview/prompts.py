@@ -175,7 +175,28 @@ def _render_custom_rules(custom_rules) -> str:
     )
 
 
-def build_user_prompt(rendered_diff, pr_title, pr_body, custom_rules) -> str:
+_PROFILE_DIRECTIVES = {
+    "chill": "REVIEW PROFILE: chill — report only clear, material issues "
+             "(correctness, bugs, security). Skip style nitpicks and minor suggestions.",
+    "assertive": "REVIEW PROFILE: assertive — report material issues plus notable "
+                 "design/maintainability improvements; still skip trivial nitpicks.",
+    "strict": "REVIEW PROFILE: strict — report all issues, including style, naming, "
+              "and minor improvements.",
+}
+
+
+def _profile_directive(profile) -> str:
+    """Map a config profile (chill/assertive/strict) to a trusted prompt directive.
+
+    Unknown/empty profiles contribute nothing (the system prompt's default
+    low-false-positive stance applies).
+    """
+    if not profile:
+        return ""
+    return _PROFILE_DIRECTIVES.get(str(profile).strip().lower(), "")
+
+
+def build_user_prompt(rendered_diff, pr_title, pr_body, custom_rules, profile=None) -> str:
     """Build the user message for one review call.
 
     Layout:
@@ -203,6 +224,10 @@ def build_user_prompt(rendered_diff, pr_title, pr_body, custom_rules) -> str:
         "Review the following Pull Request diff and report concrete issues per your "
         "system instructions and output contract."
     )
+
+    directive = _profile_directive(profile)
+    if directive:
+        parts.append(directive)
 
     if rules_block:
         parts.append(rules_block.rstrip())

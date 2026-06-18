@@ -120,12 +120,13 @@ _HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _is_ignored(filename: str) -> bool:
-    """True if *filename* matches any SKIP_PATTERNS glob (basename or path)."""
+def _is_ignored(filename: str, extra_globs=None) -> bool:
+    """True if *filename* matches any default or user ignore glob (basename or path)."""
     if not filename:
         return True
     base = filename.rsplit("/", 1)[-1]
-    for pat in SKIP_PATTERNS:
+    patterns = SKIP_PATTERNS if not extra_globs else list(SKIP_PATTERNS) + list(extra_globs)
+    for pat in patterns:
         if fnmatch.fnmatch(filename, pat) or fnmatch.fnmatch(base, pat):
             return True
     return False
@@ -143,12 +144,16 @@ def _file_rank(filename: str) -> int:
 # ── public: filter_files ─────────────────────────────────────────────────────
 
 
-def filter_files(files: list) -> tuple:
+def filter_files(files: list, extra_ignore=None) -> tuple:
     """Filter a list of GitHub PR "files" objects.
+
+    *extra_ignore* is an optional list of user globs (from ``.pr-review.yaml``'s
+    ``ignore:`` key) that EXTEND the built-in SKIP_PATTERNS.
 
     Drops, in order:
       * entries with no usable filename,
-      * ignored globs (lockfiles, minified, vendored, binary assets, ...),
+      * ignored globs (built-in defaults + user ``ignore:`` — lockfiles, minified,
+        vendored, binary assets, ...),
       * binary files (GitHub flags them or omits the patch),
       * files with no ``patch`` (binary / too-large / rename-only metadata),
       * pure deletions (``status == "removed"``) — nothing to review on the
@@ -171,7 +176,7 @@ def filter_files(files: list) -> tuple:
 
         status = (f.get("status") or "").lower()
 
-        if _is_ignored(filename):
+        if _is_ignored(filename, extra_ignore):
             skipped.append(filename)
             continue
 

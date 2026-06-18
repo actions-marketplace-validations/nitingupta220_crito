@@ -1,4 +1,4 @@
-name: "PR Review Agent"
+name: "crito"
 description: >-
   Zero-infra, BYOK PR reviewer. Reads a pull-request diff via the GitHub API,
   reviews it with free OpenRouter models, and posts ONE batched review.
@@ -21,7 +21,7 @@ inputs:
   openrouter_models:
     description: >-
       Optional comma-separated OpenRouter model slugs (max 3 are used). Overrides
-      the .pr-review.yaml / defaults. Example:
+      the .crito.yaml / defaults. Example:
       "openai/gpt-oss-120b:free,nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free".
     required: false
     default: ""
@@ -38,7 +38,7 @@ runs:
       shell: bash
       run: python -m pip install --disable-pip-version-check -r "${{ github.action_path }}/requirements.txt"
 
-    - name: Run PR review agent
+    - name: Run crito
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
@@ -46,7 +46,7 @@ runs:
         OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         OPENROUTER_MODELS: ${{ inputs.openrouter_models }}
-        # github.action_path holds the prreview/ package; make it importable
+        # github.action_path holds the crito/ package; make it importable
         # regardless of the consumer's checkout layout.
         PYTHONPATH: ${{ github.action_path }}
-      run: python -m prreview.review
+      run: python -m crito.review

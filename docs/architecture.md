@@ -18,7 +18,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: nitingupta220/review-agent@v1
+      - uses: nitingupta220/crito@v1
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # auto-minted, scoped per run
@@ -51,7 +51,7 @@ Keep the **staged pipeline** as pure functions with clean module boundaries; kee
 
 ```
 Entrypoint (Action)
-  → Config loader   (.pr-review.yaml + .pr-review/rules.md, documented precedence)
+  → Config loader   (.crito.yaml + .crito/rules.md, documented precedence)
   → Ingest          (GET /pulls/{n}/files; parse hunks; tag added/modified/deleted/binary/renamed)
   → Filter          (ignore-globs: lockfiles / *.min.* / dist / vendor / generated; strip delete-only hunks)
   → Secret scan     (gitleaks over diff → redact BEFORE anything reaches the model)
@@ -69,7 +69,7 @@ Entrypoint (Action)
 | Component | Responsibility |
 |---|---|
 | **Action Entrypoint** | Reads `$GITHUB_EVENT_PATH` (PR number, repo, base/head SHA, action type) + env secrets; owns the SHA-dedup gate and the full-vs-incremental decision. Isolated so a v2 webhook entrypoint can call the same engine. |
-| **Config Loader** | Loads `.pr-review.yaml` + optional `.pr-review/rules.md`; resolves precedence (PR command > repo yaml > org remote config > defaults); selects path-glob-matched rules per changed file. |
+| **Config Loader** | Loads `.crito.yaml` + optional `.crito/rules.md`; resolves precedence (PR command > repo yaml > org remote config > defaults); selects path-glob-matched rules per changed file. |
 | **Diff Ingest + Filter** | Parses unified diff into per-file hunk objects; tags file status; drops binary / missing-patch files (the `/files` patch field is omitted on huge files; endpoint caps at 3000 files); applies default + user ignore-globs; strips delete-only hunks. Surfaces skipped files (never silently drops). |
 | **Secret Pre-Scanner** | Runs gitleaks (stdin/regex) over the diff before prompt assembly; redacts matches to `[REDACTED_SECRET]`; emits each as a high-severity finding. Mandatory because free models may route to training-enabled providers. |
 | **Contextualize** | Emits a `__new hunk__` block with **reference line numbers prepended to each new-side line** (+ `__old hunk__` if deletions); expands asymmetric context (3 before / 1 after, cap 10) to enclosing function/class. This is the #1 lever for line-number accuracy — the model returns ranges that map back exactly; never trust it to count. |

@@ -154,7 +154,7 @@ def _coerce_text(value) -> str:
 def _render_custom_rules(custom_rules) -> str:
     """Render trusted, repo-authored custom rules into an instruction block.
 
-    ``custom_rules`` may be a string (the raw contents of ``.pr-review/rules.md``)
+    ``custom_rules`` may be a string (the raw contents of ``.crito/rules.md``)
     or a list of rule strings. It is TRUSTED (it comes from the repository, not
     the PR author) so it is rendered OUTSIDE the untrusted fence and is allowed to
     carry instruction authority. Returns an empty string when there are no rules.

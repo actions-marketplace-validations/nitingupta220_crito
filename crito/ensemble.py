@@ -1,6 +1,6 @@
 """Ensemble review: fan the SAME prompt out to <=3 different models, union+dedup.
 
-Imports ``prreview.schema`` for normalization; otherwise pure stdlib (asyncio).
+Imports ``crito.schema`` for normalization; otherwise pure stdlib (asyncio).
 Deliberately does NOT import ``httpx`` — the ``client`` is injected, so this
 module stays in the stdlib-only smoke test's reach.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 
-from prreview.schema import SEVERITIES, normalize_finding
+from crito.schema import SEVERITIES, normalize_finding
 
 # Severity ordering: index 0 ("critical") is most severe. Unknown sorts last.
 _SEVERITY_RANK = {sev: i for i, sev in enumerate(SEVERITIES)}

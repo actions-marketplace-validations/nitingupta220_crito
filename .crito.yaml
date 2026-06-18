@@ -1,11 +1,11 @@
-# .pr-review.yaml — configuration for the review-agent GitHub Action.
+# .crito.yaml — configuration for the crito GitHub Action.
 #
-# Every key below is honored by prreview/config.py::load_config. No invented
+# Every key below is honored by crito/config.py::load_config. No invented
 # keys exist; anything load_config does not read is silently ignored.
 #
 # Precedence (lowest wins to highest):
 #   1. dataclass defaults (zero-config baseline)
-#   2. this file (.pr-review.yaml)
+#   2. this file (.crito.yaml)
 #   3. the OPENROUTER_MODELS env var (overrides the `models` list ONLY)
 #
 # This file is committed so the agent dogfoods its own config; it also doubles

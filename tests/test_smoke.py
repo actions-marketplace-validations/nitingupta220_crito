@@ -10,8 +10,8 @@ check. There is NO pytest dependency — this is plain ``assert`` inside a
 ``main()``.
 
 HARD CONSTRAINT: this file must import ONLY the standard library and the
-stdlib-only ``prreview`` submodules. It MUST NOT import ``prreview.openrouter``
-or ``prreview.github_client`` (both pull in ``httpx``), so the smoke test runs
+stdlib-only ``crito`` submodules. It MUST NOT import ``crito.openrouter``
+or ``crito.github_client`` (both pull in ``httpx``), so the smoke test runs
 with nothing but a CPython install. To exercise ``run_ensemble`` without a
 network, we inject a ``FakeClient`` whose ``chat_json`` is an ``async def``
 returning a fixed findings dict — the ensemble only depends on that duck-typed
@@ -46,11 +46,11 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-# stdlib-only prreview submodules. NOTE: deliberately NO prreview.openrouter and
-# NO prreview.github_client (those import httpx).
-from prreview import authz, diff, ensemble, postprocess, sanitize, secrets_scan
-from prreview.prompts import build_user_prompt
-from prreview.schema import normalize_finding
+# stdlib-only crito submodules. NOTE: deliberately NO crito.openrouter and
+# NO crito.github_client (those import httpx).
+from crito import authz, diff, ensemble, postprocess, sanitize, secrets_scan
+from crito.prompts import build_user_prompt
+from crito.schema import normalize_finding
 
 _FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "sample_diff.json")
 
@@ -357,8 +357,8 @@ def check_authz():
 
 def main() -> int:
     # Sanity: the forbidden httpx-importing modules must NOT have been pulled in.
-    assert "prreview.openrouter" not in sys.modules, "smoke test must not import prreview.openrouter"
-    assert "prreview.github_client" not in sys.modules, "smoke test must not import prreview.github_client"
+    assert "crito.openrouter" not in sys.modules, "smoke test must not import crito.openrouter"
+    assert "crito.github_client" not in sys.modules, "smoke test must not import crito.github_client"
     assert "httpx" not in sys.modules, "smoke test must run on stdlib only (httpx was imported)"
 
     check("1. filter_files drops lockfile/min, keeps python", check_filter_files)

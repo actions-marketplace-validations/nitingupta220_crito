@@ -1,7 +1,7 @@
 """Gitleaks-style secret pre-scan for the PR review agent.
 
 Pure stdlib (``re`` only). This module is deliberately self-contained: it does
-NOT import ``prreview.schema`` (or anything that pulls in httpx), so it is safe
+NOT import ``crito.schema`` (or anything that pulls in httpx), so it is safe
 for the STDLIB-ONLY smoke test and can run as the very first step of the
 pipeline — before any text reaches a model.
 

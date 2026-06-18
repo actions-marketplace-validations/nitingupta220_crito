@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation & usage
-    url: https://github.com/nitingupta220/review-agent#readme
-    about: Setup, configuration (.pr-review.yaml), the model chain, and how the review works. Please read this before filing an issue.
+    url: https://github.com/nitingupta220/crito#readme
+    about: Setup, configuration (.crito.yaml), the model chain, and how the review works. Please read this before filing an issue.
   - name: Report a security vulnerability (do NOT open a public issue)
-    url: https://github.com/nitingupta220/review-agent/blob/main/docs/security-and-ops.md
+    url: https://github.com/nitingupta220/crito/blob/main/docs/security-and-ops.md
     about: Found a prompt-injection escape, secret exposure, or authz bypass? Do NOT file a public issue. Follow the private disclosure guidance in the security note here.

@@ -1,0 +1,76 @@
+# .pr-review.yaml — configuration for the review-agent GitHub Action.
+#
+# Every key below is honored by prreview/config.py::load_config. No invented
+# keys exist; anything load_config does not read is silently ignored.
+#
+# Precedence (lowest wins to highest):
+#   1. dataclass defaults (zero-config baseline)
+#   2. this file (.pr-review.yaml)
+#   3. the OPENROUTER_MODELS env var (overrides the `models` list ONLY)
+#
+# This file is committed so the agent dogfoods its own config; it also doubles
+# as the copy-paste example for downstream users. Delete or comment any key to
+# fall back to the default shown in its comment.
+
+# ── models ────────────────────────────────────────────────────────────────
+# A list (or comma-string) of OpenRouter model ids. Capped to 3 (OpenRouter's
+# hard limit on models[]). The same prompt fans out concurrently to each model
+# and findings are unioned + deduped. The OPENROUTER_MODELS env var (and the
+# action's openrouter_models input) overrides this list only.
+#
+# Default chain (config.DEFAULT_MODELS, verified serving 2026-06-13 — the :free
+# roster churns, so treat these as runtime config, not guarantees):
+#   - openai/gpt-oss-120b:free               # reliable pure-JSON lead
+#   - nvidia/nemotron-3-super-120b-a12b:free # 1M ctx, lineage diversity
+#   - google/gemma-4-31b-it:free             # 262k ctx, different blind spots
+#
+# Left commented to use the live default chain. Uncomment to pin your own,
+# e.g. a paid / ZDR-capable provider for proprietary code (see privacy_mode).
+# models:
+#   - openai/gpt-oss-120b:free
+#   - nvidia/nemotron-3-super-120b-a12b:free
+#   - google/gemma-4-31b-it:free
+
+# ── profile ───────────────────────────────────────────────────────────────
+# Review strictness directive injected into the prompt.
+#   chill     — only material issues (correctness, bugs, security). [default]
+#   assertive — material issues, more willing to push on design.
+#   strict    — everything, including style nits.
+# Default: chill
+profile: chill
+
+# ── ignore ────────────────────────────────────────────────────────────────
+# List (or comma-string) of globs that EXTEND the built-in SKIP_PATTERNS.
+# Matched files are dropped before the diff is sent to any model. Keep this
+# minimal — over-ignoring hides real changes. For this Python repo we skip
+# lockfiles (no logic to review) and generated/vendored docs assets.
+# Default: [] (empty — only the built-in SKIP_PATTERNS apply)
+ignore:
+  - "**/*.lock"
+  - "docs/_build/**"
+
+# ── max_diff_chars ────────────────────────────────────────────────────────
+# Compression budget: the combined diff is compressed to fit under this many
+# characters before prompting. Larger = more context per call, more tokens.
+# Default: 60000
+max_diff_chars: 60000
+
+# ── max_files ─────────────────────────────────────────────────────────────
+# Hard cap on the number of changed files reviewed in a single run.
+# Default: 60
+max_files: 60
+
+# ── max_findings ──────────────────────────────────────────────────────────
+# Hard cap on the number of findings posted to the PR (after union + dedupe).
+# Default: 30
+max_findings: 30
+
+# ── privacy_mode ──────────────────────────────────────────────────────────
+# ACCEPTED by load_config but NOT YET WIRED: v1 does not send ZDR provider
+# routing to OpenRouter, so setting this does not yet enforce zero-data-
+# retention. Documented honestly as roadmap. Most :free models may route only
+# if your account permits training on prompt data — for proprietary code,
+# override `models` above with a paid / ZDR-capable provider instead of
+# relying on this key.
+# Default: "zdr"
+privacy_mode: zdr

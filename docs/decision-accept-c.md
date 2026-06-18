@@ -27,7 +27,7 @@ Three git states are in play, and they disagree:
 |---|---|
 | local `main` | **Design docs only** — `docs/` (architecture, decisions, model-strategy, research-findings, security-and-ops, two spike write-ups). Describes a lean Action. |
 | `origin/main` | The merged **"full multi-agent system"**: FastAPI (`app/main.py`), a **6-agent swarm** (`app/agents/` — bug, security, performance, quality, docs, aggregator), Postgres (`app/database.py`, `app/models/db_models.py`), and a **Next.js dashboard** (`frontend/`). |
-| `origin/feature/add-ai-pr-review-agent` | A **lighter Action**-shaped variant. |
+| `origin/feature/add-ai-pr-crito` | A **lighter Action**-shaped variant. |
 
 The conflict: **the merged implementation contradicts the design docs.** The docs scope a lean Action; `origin/main` shipped a managed multi-agent platform. This record resolves the contradiction in favor of the docs, while salvaging the one part of `origin/main` that is genuinely valuable (the engine).
 
@@ -60,7 +60,7 @@ That file is the dividend of the quota/quality spikes already paid for in code. 
 
 ## 5. Salvage table
 
-| Keep (port into `prreview/`) | Discard from v1 (park for v2) |
+| Keep (port into `crito/`) | Discard from v1 (park for v2) |
 |---|---|
 | `app/services/openrouter_service.py` — the engine (3-model cap, no `require_parameters`, tolerant parser, thinking-model token floor) | `app/main.py` (FastAPI app) |
 | `scripts/action_review.py` — `SKIP_PATTERNS`, finding **sort**, per-PR **caps** | `app/routers/*` — unauth `/trigger` + `/reviews` (and `webhook.py`) |
@@ -98,11 +98,11 @@ These are not roadmap items — they ship **in v1**:
 ## 8. New module layout
 
 ```
-prreview/                 # the v1 Python package (engine + harness)
+crito/                 # the v1 Python package (engine + harness)
 .github/workflows/        # the workflow that invokes the Action
 action.yml                # composite action definition
 ```
 
-The salvaged engine and caps/skip logic move into `prreview/`; the server, DB, dashboard, and per-agent fan-out do not.
+The salvaged engine and caps/skip logic move into `crito/`; the server, DB, dashboard, and per-agent fan-out do not.
 
 **Note:** the v1 secret scan (security item **d**) is **regex-based**. The **gitleaks binary is an optional upgrade step**, not a v1 dependency — keeping the Action zero-infra and dependency-light by default.

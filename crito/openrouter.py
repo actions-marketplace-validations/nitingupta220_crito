@@ -168,8 +168,8 @@ class OpenRouterClient:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             # Identifying headers (optional, recommended by OpenRouter).
-            "HTTP-Referer": "https://github.com/review-agent",
-            "X-Title": "review-agent",
+            "HTTP-Referer": "https://github.com/crito",
+            "X-Title": "crito",
         }
 
     # -- internal HTTP -------------------------------------------------------

@@ -1,6 +1,6 @@
-# review-agent
+# crito
 
-**A lean, zero-infra, bring-your-own-key GitHub Action that reviews your PR diff with free OpenRouter models and posts one batched review.**
+_A sharp critique on every PR._ A lean, zero-infra, bring-your-own-key GitHub Action that reviews your PR diff with free OpenRouter models and posts one batched review.
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -10,11 +10,11 @@
 
 ## What it is
 
-`review-agent` is a GitHub Action that reads a pull request's diff through the GitHub API, sends it to free [OpenRouter](https://openrouter.ai/) models, and posts a single batched code review — inline comments anchored to changed lines plus one sticky summary comment. It is **pure read-and-comment**: it never checks out, builds, merges, or executes PR code, and it never writes to your repository. You bring your own OpenRouter key (BYOK); there is no server, no database, and nothing to host.
+`crito` is a GitHub Action that reads a pull request's diff through the GitHub API, sends it to free [OpenRouter](https://openrouter.ai/) models, and posts a single batched code review — inline comments anchored to changed lines plus one sticky summary comment. It is **pure read-and-comment**: it never checks out, builds, merges, or executes PR code, and it never writes to your repository. You bring your own OpenRouter key (BYOK); there is no server, no database, and nothing to host.
 
 ## Why
 
-Hosted PR reviewers like CodeRabbit, Qodo, and Graphite bill **per seat per month**. `review-agent` runs entirely inside GitHub Actions on **free OpenRouter models** using **your own API key**, so the marginal cost of a review is essentially zero. You trade a managed dashboard for a 30-line workflow file and full control over which models see your diff.
+Hosted PR reviewers like CodeRabbit, Qodo, and Graphite bill **per seat per month**. `crito` runs entirely inside GitHub Actions on **free OpenRouter models** using **your own API key**, so the marginal cost of a review is essentially zero. You trade a managed dashboard for a 30-line workflow file and full control over which models see your diff.
 
 ## Features
 
@@ -24,7 +24,7 @@ Hosted PR reviewers like CodeRabbit, Qodo, and Graphite bill **per seat per mont
 - **Incremental review** — the summary comment stores a hidden `last_reviewed_sha` marker so re-runs skip already-reviewed commits.
 - **Secret redaction** — gitleaks-style regex scrubs secrets to `[REDACTED_SECRET]` **before** the diff reaches any model, and raises a `critical` finding.
 - **Prompt-injection defense** — the untrusted diff is fenced (`<UNTRUSTED_DIFF>`), and model output is sanitized (defanged `@`-mentions, stripped HTML) before posting.
-- **Natural-language custom rules** — drop repo-specific rules in `.pr-review/rules.md`; they are injected as trusted instructions outside the untrusted fence.
+- **Natural-language custom rules** — drop repo-specific rules in `.crito/rules.md`; they are injected as trusted instructions outside the untrusted fence.
 - **Fork-safe `/review` gating** — fork PRs are reviewed on demand via a maintainer-gated `/review` comment; the agent enforces author-association + collaborator authz.
 - **Zero infra** — two runtime dependencies (`httpx`, `pyyaml`), Python 3.11, no service to run.
 
@@ -57,7 +57,7 @@ Models: openai/gpt-oss-120b:free, google/gemma-4-31b-it:free, nvidia/nemotron-3-
 
 ## Quick start
 
-Zero-config: with no `.pr-review.yaml` the action ships strong, live-verified defaults and reviews every non-draft PR automatically.
+Zero-config: with no `.crito.yaml` the action ships strong, live-verified defaults and reviews every non-draft PR automatically.
 
 ### 1. Add the workflow
 
@@ -87,8 +87,8 @@ jobs:
       - name: Checkout action
         uses: actions/checkout@v6
 
-      - name: Run review agent
-        uses: nitingupta220/review-agent@v1
+      - name: Run crito
+        uses: nitingupta220/crito@v1
         with:
           openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -139,8 +139,8 @@ jobs:
       - name: Checkout action
         uses: actions/checkout@v6
 
-      - name: Run review agent
-        uses: nitingupta220/review-agent@v1
+      - name: Run crito
+        uses: nitingupta220/crito@v1
         with:
           openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -148,7 +148,7 @@ jobs:
 
 ## Configuration
 
-All configuration is optional. Place a `.pr-review.yaml` at your repo root. Precedence is **dataclass defaults → `.pr-review.yaml` → environment override**. A copy-paste-ready, fully commented sample lives in this repo at [`.pr-review.yaml`](.pr-review.yaml).
+All configuration is optional. Place a `.crito.yaml` at your repo root. Precedence is **dataclass defaults → `.crito.yaml` → environment override**. A copy-paste-ready, fully commented sample lives in this repo at [`.crito.yaml`](.crito.yaml).
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -160,7 +160,7 @@ All configuration is optional. Place a `.pr-review.yaml` at your repo root. Prec
 | `max_findings` | int | `30` | Hard cap on findings posted (after union + dedupe). |
 | `privacy_mode` | string | `zdr` | **Accepted but not yet wired — ZDR routing is roadmap, not enforced.** Setting this does not currently send zero-data-retention provider routing. See [Privacy](#privacy). |
 
-**Custom rules.** Put natural-language, repo-specific rules in `.pr-review/rules.md`. They are injected into the prompt as **trusted** instructions, kept outside the untrusted-diff fence. Example contents:
+**Custom rules.** Put natural-language, repo-specific rules in `.crito/rules.md`. They are injected into the prompt as **trusted** instructions, kept outside the untrusted-diff fence. Example contents:
 
 ```markdown
 - All new HTTP handlers must validate the `Authorization` header.
@@ -168,7 +168,7 @@ All configuration is optional. Place a `.pr-review.yaml` at your repo root. Prec
 - Database migrations must be reversible.
 ```
 
-**Environment override.** The `OPENROUTER_MODELS` env var (set by the action's `openrouter_models` input) is a comma-separated list that overrides the `models` key **only** — all other keys still come from `.pr-review.yaml` / defaults.
+**Environment override.** The `OPENROUTER_MODELS` env var (set by the action's `openrouter_models` input) is a comma-separated list that overrides the `models` key **only** — all other keys still come from `.crito.yaml` / defaults.
 
 See [docs/custom-rules.md](docs/custom-rules.md) for more on writing effective rules.
 
@@ -182,7 +182,7 @@ nvidia/nemotron-3-super-120b-a12b:free
 google/gemma-4-31b-it:free
 ```
 
-These are chosen for liveness plus lineage diversity (OpenAI / NVIDIA / Google → different blind spots → better union recall). Override them three ways (highest precedence last): the `models:` key in `.pr-review.yaml`, the `openrouter_models:` action input, or the `OPENROUTER_MODELS` env var — each capped to 3.
+These are chosen for liveness plus lineage diversity (OpenAI / NVIDIA / Google → different blind spots → better union recall). Override them three ways (highest precedence last): the `models:` key in `.crito.yaml`, the `openrouter_models:` action input, or the `OPENROUTER_MODELS` env var — each capped to 3.
 
 > **Note on the `:free` roster.** OpenRouter's free model lineup churns — slugs get retired, renamed, or rate-limited upstream. Treat these IDs as **runtime config, not guarantees**. If a model starts 404-ing or saturating, override the chain with currently-serving slugs (or a paid / ZDR-capable provider). See [docs/model-strategy.md](docs/model-strategy.md).
 
@@ -195,7 +195,7 @@ The pipeline is a staged, read-only flow (see [docs/architecture.md](docs/archit
 3. **Filter** — binary/minified/vendored/generated/deleted files and your `ignore:` globs are dropped; remaining files are sorted source-first.
 4. **Render + budget** — the diff is rendered with reference line numbers and greedily packed under `max_diff_chars`, building the set of valid anchor lines.
 5. **Redact secrets** — a gitleaks-style scan scrubs secrets to `[REDACTED_SECRET]` before the model sees anything, and seeds a `critical` finding.
-6. **Prompt + ensemble** — one prompt (with your `profile` directive and `.pr-review/rules.md`) is sent concurrently to up to 3 models; the untrusted diff sits inside an `<UNTRUSTED_DIFF>` fence.
+6. **Prompt + ensemble** — one prompt (with your `profile` directive and `.crito/rules.md`) is sent concurrently to up to 3 models; the untrusted diff sits inside an `<UNTRUSTED_DIFF>` fence.
 7. **Union + sanitize** — findings are normalized, anchors validated against real lines, deduped, sanitized (defanged mentions, stripped HTML), and capped at `max_findings`.
 8. **Post** — one batched `COMMENT` review with inline comments plus a sticky summary carrying a hidden `last_reviewed_sha` marker for incremental skips; per-comment fallback on a `422`.
 
@@ -213,7 +213,7 @@ More detail in [docs/security-and-ops.md](docs/security-and-ops.md).
 
 ## Cost & limits
 
-`review-agent` runs on **your own** OpenRouter key against **free** models, so reviews are effectively free. The honest constraints:
+`crito` runs on **your own** OpenRouter key against **free** models, so reviews are effectively free. The honest constraints:
 
 - **Free-tier rate limits:** roughly **20 requests/min** and **~50 requests/day**, until a one-time **~$10** OpenRouter credit raises the daily cap to **~1000/day**.
 - **Per-PR cost:** the ensemble uses **up to 3 LLM calls per PR** (one per model).
@@ -232,25 +232,25 @@ Be deliberate about what you send to free models. Most OpenRouter **`:free`** mo
 The agent is mostly stdlib; only `openrouter.py` and `github_client.py` import `httpx` directly (the orchestrator `review.py` pulls it in transitively by importing those two clients). The smoke test exercises only the stdlib-only transform modules — it never imports `review.py` — so it runs with **no dependencies and no network**.
 
 ```bash
-git clone https://github.com/nitingupta220/review-agent.git
-cd review-agent
+git clone https://github.com/nitingupta220/crito.git
+cd crito
 
 # Stdlib-only smoke test — 11 checks, no deps, no network:
 python tests/test_smoke.py
 
 # Byte-compile everything:
-python -m py_compile prreview/*.py
+python -m py_compile crito/*.py
 ```
 
 **Runtime dependencies (just two):** `httpx` and `pyyaml` (see `requirements.txt`).
 
-**Module layout (`prreview/`):**
+**Module layout (`crito/`):**
 
 | Module | Responsibility |
 | --- | --- |
 | `review.py` | Orchestrator — the staged pipeline end to end |
 | `diff.py` | File filtering + diff rendering with reference line numbers |
-| `config.py` | Loads `.pr-review.yaml`, env override, custom rules |
+| `config.py` | Loads `.crito.yaml`, env override, custom rules |
 | `secrets_scan.py` | Pre-model gitleaks-style secret redaction |
 | `prompts.py` | Builds the system/user prompt, profile directive, fence |
 | `schema.py` | Findings schema + enums + normalization |

@@ -147,7 +147,7 @@ def _file_rank(filename: str) -> int:
 def filter_files(files: list, extra_ignore=None) -> tuple:
     """Filter a list of GitHub PR "files" objects.
 
-    *extra_ignore* is an optional list of user globs (from ``.pr-review.yaml``'s
+    *extra_ignore* is an optional list of user globs (from ``.crito.yaml``'s
     ``ignore:`` key) that EXTEND the built-in SKIP_PATTERNS.
 
     Drops, in order:

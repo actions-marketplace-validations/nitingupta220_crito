@@ -32,18 +32,18 @@ import sys
 import time
 import traceback
 
-from prreview import authz, diff, ensemble, postprocess, sanitize, secrets_scan
-from prreview.config import load_config
-from prreview.github_client import GitHubClient
-from prreview.openrouter import OpenRouterClient
-from prreview.prompts import SYSTEM_PROMPT, build_user_prompt
-from prreview.schema import FINDINGS_SCHEMA
+from crito import authz, diff, ensemble, postprocess, sanitize, secrets_scan
+from crito.config import load_config
+from crito.github_client import GitHubClient
+from crito.openrouter import OpenRouterClient
+from crito.prompts import SYSTEM_PROMPT, build_user_prompt
+from crito.schema import FINDINGS_SCHEMA
 
 # Hidden HTML-comment sentinel embedded in the sticky summary comment. It both
 # identifies "our" comment (so upsert edits in place) and carries the last
 # reviewed head SHA so we can skip a no-op re-review.
-_SUMMARY_MARKER = "<!-- prreview:summary -->"
-_SHA_MARKER_PREFIX = "<!-- prreview:last_reviewed_sha="
+_SUMMARY_MARKER = "<!-- crito:summary -->"
+_SHA_MARKER_PREFIX = "<!-- crito:last_reviewed_sha="
 _SHA_MARKER_SUFFIX = " -->"
 
 
@@ -141,10 +141,10 @@ def _is_fork_pr(pr_obj: dict) -> bool:
 def _telemetry(**fields) -> None:
     """Print one structured (JSON) telemetry line. No secrets are ever included."""
     try:
-        print("prreview " + json.dumps(fields, default=str, sort_keys=True))
+        print("crito " + json.dumps(fields, default=str, sort_keys=True))
     except Exception:
         # Telemetry must never crash the run.
-        print(f"prreview {fields}")
+        print(f"crito {fields}")
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 Two-file, config-as-code (the proven CodeRabbit / PR-Agent pattern). Rules are **natural-language and prompt-injected — no rule DSL / regex / AST engine in v1** (even PR-Agent left structured rules as an open feature request; the whole industry uses NL rules).
 
-## File 1 — `.pr-review.yaml` (settings, at repo root)
+## File 1 — `.crito.yaml` (settings, at repo root)
 
 ```yaml
 model: qwen/qwen3-coder:free
@@ -33,7 +33,7 @@ rules:                      # inline rules OR point at the markdown file below
   - path: "src/app/api/**/*.ts"
     severity: warning       # info | warning | error  (advisory hint to the model)
     instructions: "Every endpoint must check authentication before any DB access."
-rules_file: .pr-review/rules.md
+rules_file: .crito/rules.md
 
 tools: {}                   # reserved for the hybrid-linter stage (eslint/ruff/semgrep/gitleaks), default off
 
@@ -51,7 +51,7 @@ memory:                     # RESERVED so v2 learnings is non-breaking
 ### Built-in default ignore globs
 `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `poetry.lock`, `go.sum`, `Gemfile.lock`, `*.min.js`, `*.min.css`, `dist/**`, `build/**`, `vendor/**`, `node_modules/**`, `*.snap`, `*.svg`, `*.pb.go`, `*.generated.*`, plus `linguist-generated` files via `.gitattributes`. Users **extend**, not replace.
 
-## File 2 — `.pr-review/rules.md` (natural-language rules)
+## File 2 — `.crito/rules.md` (natural-language rules)
 
 ```markdown
 # Review rules
@@ -75,11 +75,11 @@ Easier for humans to write than YAML strings, and maps cleanly to a prompt secti
 ## Precedence (document explicitly; log which won)
 
 ```
-PR comment command  >  repo .pr-review.yaml  >  org remote_config  >  built-in defaults
+PR comment command  >  repo .crito.yaml  >  org remote_config  >  built-in defaults
 ```
 
 Every key is optional with strong defaults, so a zero-config repo still gets a good review and the file can be added incrementally.
 
 ## v1 "learnings" for free
 
-Treat `.pr-review/rules.md` as the user-editable memory: when the agent posts a finding the user disagrees with, they append a one-line rule. Real embeddings-backed learnings (with dismissal capture + retrieval) is v2 and requires a webhook/event stream a stateless Action doesn't have.
+Treat `.crito/rules.md` as the user-editable memory: when the agent posts a finding the user disagrees with, they append a one-line rule. Real embeddings-backed learnings (with dismissal capture + retrieval) is v2 and requires a webhook/event stream a stateless Action doesn't have.

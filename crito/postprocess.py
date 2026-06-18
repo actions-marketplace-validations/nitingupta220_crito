@@ -1,6 +1,6 @@
 """Finalize model findings before they are posted as a PR review.
 
-Pure stdlib. Imports ``prreview.schema`` for the canonical severity ordering and
+Pure stdlib. Imports ``crito.schema`` for the canonical severity ordering and
 the single-finding normalizer; everything else is local.
 
 The single public function, :func:`finalize`, takes the union/dedup'd findings
@@ -15,7 +15,7 @@ Findings are plain dicts shaped per FINDINGS_SCHEMA.
 
 from __future__ import annotations
 
-from prreview.schema import SEVERITIES, normalize_finding
+from crito.schema import SEVERITIES, normalize_finding
 
 # Rank for sorting: critical (most severe) first. Anything unknown sorts last.
 _SEVERITY_RANK = {sev: i for i, sev in enumerate(SEVERITIES)}

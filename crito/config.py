@@ -3,16 +3,16 @@
 Module import is stdlib-only — pyyaml is imported *lazily inside*
 :func:`load_config` so simply importing this module (or running the STDLIB-ONLY
 smoke test) never requires the third-party ``yaml`` package. Zero-config is a
-first-class case: with no ``.pr-review.yaml`` and no environment overrides the
+first-class case: with no ``.crito.yaml`` and no environment overrides the
 returned :class:`Config` already carries strong, live-verified defaults.
 
 Precedence (lowest to highest):
   1. Dataclass defaults (zero-config baseline).
-  2. ``.pr-review.yaml`` at the repo root (if present and parseable).
+  2. ``.crito.yaml`` at the repo root (if present and parseable).
   3. ``OPENROUTER_MODELS`` environment variable (comma-separated) — overrides
      the model list only.
 
-Custom rules are loaded from ``.pr-review/rules.md`` when present. These are
+Custom rules are loaded from ``.crito/rules.md`` when present. These are
 *trusted* repo-authored instructions and are kept separate from the model list;
 the prompt builder places them OUTSIDE the untrusted-diff fence.
 
@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 # (z-ai/glm-4.5-air:free now 404s "use the paid slug"; qwen/qwen3-coder:free is
 # upstream-saturated/429), so these are chosen for liveness + lineage diversity
 # (OpenAI / NVIDIA / Google => different blind spots => better union recall).
-# Always overridable via the OPENROUTER_MODELS env var or .pr-review.yaml.
+# Always overridable via the OPENROUTER_MODELS env var or .crito.yaml.
 DEFAULT_MODELS = [
     "openai/gpt-oss-120b:free",                 # reliable pure-JSON lead
     "nvidia/nemotron-3-super-120b-a12b:free",   # 1M ctx, serving
@@ -44,7 +44,7 @@ class Config:
 
     Fields match the public CONTRACT exactly. ``ignore`` defaults to an empty
     tuple via ``default_factory`` so no two Config instances share a mutable
-    default. ``custom_rules`` is the raw text of ``.pr-review/rules.md`` (or
+    default. ``custom_rules`` is the raw text of ``.crito/rules.md`` (or
     None when absent).
     """
 
@@ -67,13 +67,13 @@ def _cap_models(models) -> list:
 
 
 def _read_yaml(repo_root: str) -> dict:
-    """Read and parse ``.pr-review.yaml`` from ``repo_root``.
+    """Read and parse ``.crito.yaml`` from ``repo_root``.
 
     yaml is imported here (lazily) so module import stays stdlib-only. Any read
     or parse error — including pyyaml not being installed — degrades gracefully
     to an empty dict so zero-config / missing-dep environments still work.
     """
-    path = os.path.join(repo_root, ".pr-review.yaml")
+    path = os.path.join(repo_root, ".crito.yaml")
     if not os.path.isfile(path):
         return {}
     try:
@@ -89,8 +89,8 @@ def _read_yaml(repo_root: str) -> dict:
 
 
 def _read_custom_rules(repo_root: str):
-    """Return the text of ``.pr-review/rules.md`` if present, else None."""
-    path = os.path.join(repo_root, ".pr-review", "rules.md")
+    """Return the text of ``.crito/rules.md`` if present, else None."""
+    path = os.path.join(repo_root, ".crito", "rules.md")
     if not os.path.isfile(path):
         return None
     try:
@@ -105,7 +105,7 @@ def _read_custom_rules(repo_root: str):
 def load_config(repo_root: str) -> Config:
     """Build a :class:`Config` for ``repo_root``.
 
-    Reads the optional ``.pr-review.yaml`` and optional ``.pr-review/rules.md``,
+    Reads the optional ``.crito.yaml`` and optional ``.crito/rules.md``,
     applies the ``OPENROUTER_MODELS`` env override, caps the model list to 3,
     and falls back to strong defaults so a repo with no config still gets a
     sensible review.

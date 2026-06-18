@@ -35,7 +35,7 @@ jobs:
       - name: Checkout action
         uses: actions/checkout@v6
 
-      - name: Run review agent
+      - name: Run crito
         uses: ./
         with:
           openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}

@@ -1,12 +1,12 @@
 ---
 name: Feature request
-about: Propose an enhancement for review-agent
+about: Propose an enhancement for crito
 title: "[feat]: "
 labels: enhancement
 ---
 
 <!--
-Thanks for the idea! review-agent is intentionally lean: a zero-infra, BYOK
+Thanks for the idea! crito is intentionally lean: a zero-infra, BYOK
 GitHub Action that does a pure read -> comment review and nothing else. Proposals
 that keep it in that lane land fastest.
 
@@ -32,7 +32,7 @@ issue — see the security note in docs/security-and-ops.md.
 ### Does it respect the design constraints?
 
 <!--
-review-agent's non-negotiables. Check the ones your proposal upholds, and note
+crito's non-negotiables. Check the ones your proposal upholds, and note
 any it would bend.
 -->
 

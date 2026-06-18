@@ -1,12 +1,12 @@
 ---
 name: Bug report
-about: Report a defect in review-agent (wrong/missing review, crash, bad comment, auth/quota failure)
+about: Report a defect in crito (wrong/missing review, crash, bad comment, auth/quota failure)
 title: "[bug]: "
 labels: bug
 ---
 
 <!--
-Thanks for filing a bug. review-agent is a pure read -> comment GitHub Action that
+Thanks for filing a bug. crito is a pure read -> comment GitHub Action that
 reviews a PR diff with free OpenRouter models and posts one batched review.
 The more of the boxes below you fill in, the faster this gets fixed.
 
@@ -60,7 +60,7 @@ best-effort and you are responsible for what you post in a public issue.
 paste log lines here
 ```
 
-### Your `.pr-review.yaml` (if any)
+### Your `.crito.yaml` (if any)
 
 <!--
 Paste your config file if you have one. Honored keys: models, profile, ignore,
@@ -69,7 +69,7 @@ zero-config repo.
 -->
 
 ```yaml
-# paste .pr-review.yaml here, or delete this block if you have none
+# paste .crito.yaml here, or delete this block if you have none
 ```
 
 ### Link to a PR that reproduces it
@@ -79,6 +79,6 @@ zero-config repo.
 
 ### Environment
 
-- review-agent version / tag (e.g. `v1`, `v1.0.1`):
+- crito version / tag (e.g. `v1`, `v1.0.1`):
 - Repo visibility: public / private
 - Same-repo PR or fork PR:

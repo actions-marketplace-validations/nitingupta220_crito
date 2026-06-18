@@ -233,7 +233,7 @@ sequenceDiagram
     GH->>CR: Trigger with openrouter_api_key + github_token
     CR->>GH: Read diff (GitHub API)
     CR->>CR: Filter, redact secrets, compress, fence diff
-    CR->>OR: Send &lt;UNTRUSTED_DIFF&gt; to up to 3 free models
+    CR->>OR: Send fenced UNTRUSTED_DIFF to up to 3 free models
     OR-->>CR: Per-model findings
     CR->>CR: Union + dedup, validate, gate, cap, sanitize
     alt New commits since last_reviewed_sha

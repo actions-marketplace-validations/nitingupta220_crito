@@ -49,6 +49,7 @@ if _REPO_ROOT not in sys.path:
 # stdlib-only crito submodules. NOTE: deliberately NO crito.openrouter and
 # NO crito.github_client (those import httpx).
 from crito import authz, diff, ensemble, postprocess, sanitize, secrets_scan
+from crito.errors import ModelUnavailable
 from crito.prompts import build_user_prompt
 from crito.schema import normalize_finding
 
@@ -106,11 +107,33 @@ class FakeClient:
 
     async def chat_json(self, system=None, user=None, max_tokens=None,
                         response_format=None, models=None):
-        # The ensemble now pins one model per call via the models= override
-        # (no shared-state mutation), so attribute the result to that.
+        # The ensemble pins one model per call via the models= override, so
+        # attribute the result to that.
         served = (models or self.models or ["fake/model"])[0]
         # Return a deep-ish copy so callers can't mutate our canned data.
         return {"findings": [dict(f) for f in self._findings]}, served
+
+
+class FailoverFakeClient:
+    """Fake client where some models are 'unavailable' (raise ModelUnavailable).
+
+    Records every model id it was asked for (``calls``) so a test can assert the
+    slot advanced down the ranked pool and that no model was used by two slots.
+    """
+
+    def __init__(self, bad, findings):
+        self.bad = set(bad)
+        self._findings = findings
+        self.models = []
+        self.calls: list = []
+
+    async def chat_json(self, system=None, user=None, max_tokens=None,
+                        response_format=None, models=None):
+        m = (models or ["?"])[0]
+        self.calls.append(m)
+        if m in self.bad:
+            raise ModelUnavailable(f"down: {m}")
+        return {"findings": [dict(f) for f in self._findings]}, m
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +287,7 @@ def check_run_ensemble_with_fake_client():
     out = asyncio.run(
         ensemble.run_ensemble(
             client=client,
-            models=models,
+            pool=models,
             system="sys",
             user="usr",
             response_format=None,
@@ -276,6 +299,57 @@ def check_run_ensemble_with_fake_client():
     assert out[0]["category"] == "security"
     # Both models should be recorded as having reported it.
     assert set(out[0].get("models") or []) == {"fake/model-a", "fake/model-b"}, out[0].get("models")
+
+
+def _sample_finding():
+    return {
+        "relevant_file": "app/db.py",
+        "start_line": 11,
+        "end_line": 11,
+        "severity": "critical",
+        "category": "security",
+        "comment": "SQL injection via string formatting; use a parameterized query.",
+        "confidence": 0.95,
+    }
+
+
+def check_slot_failover_advances():
+    # A slot whose first two pool models are unavailable must ADVANCE down the
+    # ranked pool to the next serving model rather than abstaining.
+    client = FailoverFakeClient(bad=["down/a", "down/b"], findings=[_sample_finding()])
+    out = asyncio.run(
+        ensemble.run_ensemble(
+            client=client, pool=["down/a", "down/b", "good/c"],
+            system="s", user="u", active_slots=1,
+        )
+    )
+    assert len(out) == 1, f"slot must advance past unavailable models, got {len(out)}"
+    assert out[0].get("models") == ["good/c"], out[0].get("models")
+    assert client.calls == ["down/a", "down/b", "good/c"], client.calls
+
+    # Pool fully exhausted -> the slot abstains cleanly (no crash, no findings).
+    client2 = FailoverFakeClient(bad=["down/a"], findings=[_sample_finding()])
+    out2 = asyncio.run(
+        ensemble.run_ensemble(
+            client=client2, pool=["down/a"], system="s", user="u", active_slots=1,
+        )
+    )
+    assert out2 == [], f"exhausted pool must abstain, got {out2}"
+
+
+def check_no_duplicate_slots():
+    # 3 slots over a 4-model pool, all serving: each slot must claim a DISTINCT
+    # model (shared lock-guarded iterator), so 3 calls, no model used twice.
+    client = FailoverFakeClient(bad=[], findings=[_sample_finding()])
+    out = asyncio.run(
+        ensemble.run_ensemble(
+            client=client, pool=["a", "b", "c", "d"],
+            system="s", user="u", active_slots=3,
+        )
+    )
+    assert len(client.calls) == 3, f"3 serving slots = 3 calls, got {client.calls}"
+    assert len(set(client.calls)) == 3, f"no model used by two slots, got {client.calls}"
+    assert len(out) == 1, f"identical findings dedup to 1, got {len(out)}"
 
 
 def check_finalize_anchor_gating_and_cap():
@@ -372,6 +446,8 @@ def main() -> int:
     check("8. authz.is_authorized OWNER yes / NONE no", check_authz)
     check("9. filter_files honors user ignore globs", check_ignore_globs)
     check("10. build_user_prompt injects profile directive", check_profile_directive)
+    check("11. ensemble slot fails over down the ranked pool", check_slot_failover_advances)
+    check("12. ensemble slots never reuse the same model", check_no_duplicate_slots)
 
     passed = sum(1 for _n, ok, _d in _RESULTS if ok)
     total = len(_RESULTS)

@@ -24,18 +24,36 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-# Live-verified free defaults (2026-06-02 spike):
-#   * gpt-oss-120b  — the only reliably JSON-clean free model; leads the chain.
-# Verified serving 2026-06-13 against a live free key. The :free roster churns
-# (z-ai/glm-4.5-air:free now 404s "use the paid slug"; qwen/qwen3-coder:free is
-# upstream-saturated/429), so these are chosen for liveness + lineage diversity
-# (OpenAI / NVIDIA / Google => different blind spots => better union recall).
-# Always overridable via the OPENROUTER_MODELS env var or .crito.yaml.
-DEFAULT_MODELS = [
-    "openai/gpt-oss-120b:free",                 # reliable pure-JSON lead
-    "nvidia/nemotron-3-super-120b-a12b:free",   # 1M ctx, serving
-    "google/gemma-4-31b-it:free",               # 262k ctx, serving
+# Ranked pool of top FREE coding/reasoning models (best -> worst for code review),
+# live-verified against the OpenRouter :free catalog on 2026-06-18. The ensemble
+# fills ACTIVE_SLOTS slots from the TOP of this pool and, when a slot's model is
+# unavailable (429 saturated / 404 dead / 503 / empty), advances down the pool to
+# the next still-serving model — so a slot only abstains when the pool is exhausted.
+#
+# The :free roster CHURNS hard: Kimi K2's :free slug retired ~2026-06-13, and GLM /
+# DeepSeek frontier coders are paid-only now (reintroduce their :free slugs here if
+# they ever return). Retired slugs are also pruned at runtime against the live
+# catalog (openrouter.list_free_models), so a dead entry never wastes a slot.
+CODING_POOL = [
+    "poolside/laguna-m.1:free",                  # flagship agentic coder, 72.5% SWE-bench Verified
+    "qwen/qwen3-coder:free",                     # proven #1 free coder, 1M ctx (often 429 -> failover skips)
+    "cohere/north-mini-code:free",               # Cohere code-specialist + reasoning
+    "nex-agi/nex-n2-pro:free",                   # Qwen3.5-lineage agentic MoE, best JSON support
+    "poolside/laguna-xs.2:free",                 # 2nd Poolside coder, 68.2% SWE-bench
+    "openai/gpt-oss-120b:free",                  # most JSON-clean free model; reliability floor
+    "nvidia/nemotron-3-ultra-550b-a55b:free",    # 1M ctx, deep failover for very large diffs
+    "nvidia/nemotron-3-super-120b-a12b:free",    # NVIDIA lineage diversity
+    "google/gemma-4-31b-it:free",                # Google lineage blind-spot coverage (small max_out)
+    "qwen/qwen3-next-80b-a3b-instruct:free",     # Qwen3-Next, structured JSON (often 429)
+    "openai/gpt-oss-20b:free",                   # light JSON-clean last-resort
 ]
+
+# Number of distinct models reviewed concurrently (the ensemble width). Each is a
+# "slot" that fails over down CODING_POOL independently.
+ACTIVE_SLOTS = 3
+
+# The active primaries shown/used when no override is given = the top of the pool.
+DEFAULT_MODELS = CODING_POOL[:ACTIVE_SLOTS]
 
 
 @dataclass
@@ -56,6 +74,9 @@ class Config:
     max_files: int = 60
     max_findings: int = 30
     custom_rules: "str | None" = None
+    # The full ranked failover pool (the active ``models`` are its first slots;
+    # remaining entries are the failover tail). Defaults to the built-in CODING_POOL.
+    coding_pool: list = field(default_factory=lambda: list(CODING_POOL))
 
 
 def _cap_models(models) -> list:
@@ -145,3 +166,20 @@ def load_config(repo_root: str) -> Config:
 
     cfg.custom_rules = _read_custom_rules(repo_root)
     return cfg
+
+
+def effective_pool(cfg: Config) -> list:
+    """Ranked failover pool for a run: the active primaries first, then the rest
+    of the coding pool (deduped, order-preserving).
+
+    When the user overrode ``models`` (via ``.crito.yaml`` / ``OPENROUTER_MODELS``)
+    those become the leading slots and failover still draws from the full coding
+    pool tail, so a saturated/dead primary still advances to a strong coder.
+    """
+    seen: set = set()
+    out: list = []
+    for m in list(cfg.models or []) + list(cfg.coding_pool or []):
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out

@@ -33,9 +33,18 @@ import httpx
 
 MAX_MODELS = 3
 
+# Typed errors live in the stdlib-only crito.errors module so the ensemble can
+# import them without pulling in httpx. Re-exported here for callers of the client.
+from crito.errors import OpenRouterError, ModelUnavailable, KeyFatal  # noqa: E402,F401
+
 # Models with internal reasoning/thinking that consume extra output tokens.
 # They must be given a larger output budget or visible content comes back empty.
-_THINKING_MODEL_PATTERNS = ("glm", "kimi", "o1", "o3", "deepseek-r1")
+# Includes the top free CODING models (laguna/north/nex) + nemotron — all are
+# reasoning models that would otherwise return empty content under the bare floor.
+_THINKING_MODEL_PATTERNS = (
+    "glm", "kimi", "o1", "o3", "deepseek-r1",
+    "laguna", "poolside", "north", "nex", "nemotron",
+)
 _THINKING_MIN_TOKENS = 8192
 
 # Floor for ANY request's output budget. Below this, even non-thinking free
@@ -178,11 +187,14 @@ class OpenRouterClient:
         """
         POST one chat-completion request with bounded backoff on 429/503.
 
-        Backoff is exponential with jitter. After the retry cap is hit on a
-        retryable status, the error is raised so the caller can advance/handle;
-        OpenRouter's own models[] routing is the primary fallback.
+        Raises a TYPED error so the ensemble can react:
+          * 401 / 402  -> ``KeyFatal``       (key dead — abort the whole run)
+          * 404 / 403 / 400 / other 4xx-5xx, and 429/503 after the retry cap,
+            and network errors after the cap -> ``ModelUnavailable`` (advance to
+            the next model in the ranked pool).
+        429 / 503 are retried in place with exponential backoff + jitter
+        (honoring ``Retry-After``) up to ``_MAX_RETRIES`` before being surfaced.
         """
-        last_exc: Optional[Exception] = None
         async with httpx.AsyncClient(timeout=self.timeout) as http:
             for attempt in range(_MAX_RETRIES):
                 try:
@@ -192,25 +204,30 @@ class OpenRouterClient:
                         json=payload,
                     )
                 except httpx.RequestError as exc:
-                    # Network-level error (DNS, connect, read timeout). Treat as
-                    # transient and back off, up to the cap.
-                    last_exc = exc
+                    # Network-level error (DNS, connect, read timeout). Transient:
+                    # back off and retry, then treat as unavailable -> advance.
                     if attempt >= _MAX_RETRIES - 1:
-                        raise
+                        raise ModelUnavailable(
+                            f"network error: {type(exc).__name__}"
+                        ) from exc
                     await asyncio.sleep(self._backoff_delay(attempt))
                     continue
 
-                if resp.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
+                sc = resp.status_code
+                # Key-level failures: advancing models cannot help.
+                if sc in (401, 402):
+                    raise KeyFatal(f"OpenRouter auth/billing error (HTTP {sc})")
+                # Transient throttling/unavailability: retry in place, then advance.
+                if sc in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
                     await asyncio.sleep(self._backoff_delay(attempt, resp))
                     continue
-
-                resp.raise_for_status()
+                # Any other 4xx/5xx (404 dead slug, 403, 400 bad id, or a 429/503
+                # that survived the retry cap): this model can't serve -> advance.
+                if sc >= 400:
+                    raise ModelUnavailable(f"HTTP {sc} for {payload.get('models')}")
                 return resp.json()
 
-        # Unreachable in practice, but keep the type checker / fallback honest.
-        if last_exc is not None:
-            raise last_exc
-        raise httpx.HTTPError("chat completion failed after retries")
+        raise ModelUnavailable("exhausted retries")
 
     @staticmethod
     def _backoff_delay(attempt: int, resp: "Optional[httpx.Response]" = None) -> float:
@@ -294,3 +311,39 @@ class OpenRouterClient:
 
         parsed = _parse_json_tolerant(content)
         return parsed, served_model
+
+    async def list_free_models(self) -> set:
+        """Fetch the live ``:free`` model catalog (one GET, best-effort).
+
+        Returns the set of ``:free`` model ids OpenRouter currently lists, so a
+        retired slug (e.g. a model that lost its free tier) can be pruned from
+        the ranked pool BEFORE a run rather than wasting a failover slot on a
+        guaranteed 404. On any error returns an empty set — the caller then keeps
+        the full pool and relies on reactive per-slot failover.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as http:
+                resp = await http.get(
+                    f"{self.BASE_URL}/models", headers=self.headers
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception:
+            return set()
+        out = set()
+        for m in (data.get("data") or []):
+            mid = m.get("id")
+            if isinstance(mid, str) and mid.endswith(":free"):
+                out.add(mid)
+        return out
+
+
+def prune_to_catalog(pool: list, catalog: set) -> list:
+    """Keep only pool ids present in the live ``catalog``, preserving rank order.
+
+    If ``catalog`` is empty (the fetch failed) the pool is returned unchanged so
+    the run still proceeds and falls back on reactive per-slot failover.
+    """
+    if not catalog:
+        return list(pool)
+    return [m for m in pool if m in catalog]

@@ -308,20 +308,54 @@ privacy_mode: zdr
 
 See [docs/custom-rules.md](docs/custom-rules.md) for writing effective rules.
 
-## 🤖 Models
+## 🤖 Models & auto-routing
 
-The default chain (`config.DEFAULT_MODELS`, verified serving 2026-06-13) is:
+crito reviews with a **ranked pool of top free _coding_ models** (`config.CODING_POOL`, live-verified 2026-06-18, best→worst for code review):
 
 ```text
-openai/gpt-oss-120b:free
-nvidia/nemotron-3-super-120b-a12b:free
-google/gemma-4-31b-it:free
+poolside/laguna-m.1:free            # flagship agentic coder, 72.5% SWE-bench Verified
+qwen/qwen3-coder:free               # proven #1 free coder, 1M ctx (often 429 → skipped)
+cohere/north-mini-code:free         # Cohere code-specialist + reasoning
+nex-agi/nex-n2-pro:free             # Qwen3.5-lineage agentic MoE, best JSON support
+poolside/laguna-xs.2:free           # 2nd Poolside coder, 68.2% SWE-bench
+openai/gpt-oss-120b:free            # most JSON-clean free model; reliability floor
+… + nemotron-ultra/super, gemma, qwen3-next, gpt-oss-20b   # diversity / deep failover
 ```
 
-Chosen for liveness plus **lineage diversity** (OpenAI / NVIDIA / Google → different blind spots → better union recall). Override three ways, highest precedence last: the `models:` key in `.crito.yaml`, the `openrouter_models:` action input, or the `OPENROUTER_MODELS` env var — each capped to 3.
+### 🔀 Per-slot auto-routing (failover)
+
+The ensemble runs **3 concurrent "slots"**, each filled from the **top of the pool**. If a slot's model is **unavailable** — rate-limited (`429`), retired (`404`), down (`503`), or returns empty — that slot **automatically advances down the ranked pool to the next available top coding model**, independently. A shared lock-guarded queue hands each model to **at most one slot**, so no two slots collide and total model calls are bounded by the pool size. A slot only contributes nothing when the **whole pool** is exhausted.
+
+```mermaid
+flowchart TD
+    Pool["Ranked coding pool<br/>laguna-m.1 · qwen3-coder · north-mini-code · nex-n2-pro · …"]
+    Pool --> Prune{"Prune to live<br/>:free catalog"}
+    Prune --> Q[["Shared ranked queue<br/>(each model claimed once)"]]
+    Q --> S1["Slot 1"]
+    Q --> S2["Slot 2"]
+    Q --> S3["Slot 3"]
+    S1 --> C1{"serves?"}
+    S2 --> C2{"serves?"}
+    S3 --> C3{"serves?"}
+    C1 -- "429 / 404 / 503 / empty" --> Q
+    C2 -- "claim next" --> Q
+    C3 -- "claim next" --> Q
+    C1 -- "yes" --> U["union + dedup"]
+    C2 -- "yes" --> U
+    C3 -- "yes" --> U
+    U --> R["findings → one review"]
+    style U fill:#6D28D9,color:#fff
+```
+
+> [!NOTE]
+> Live example: `qwen/qwen3-coder` is frequently `429`-saturated upstream — its slot transparently fails over to the next serving coder (e.g. `nex-n2-pro`), and `qwen3-coder` self-heals back into rotation the moment it frees up. Key-level errors (`401`/`402`) abort instead of advancing — switching models can't fix a dead key.
+
+**Failure → action:** `429`/`503` retried with backoff then advance · `404` pruned for the run · empty/truncated advance · `401`/`402` fatal (abort).
+
+**Override** three ways, highest precedence last: the `models:` key in `.crito.yaml`, the `openrouter_models:` action input, or the `OPENROUTER_MODELS` env var (each capped to 3 active slots) — your picks become the leading slots and failover still draws from the full coding pool tail.
 
 > [!WARNING]
-> **The `:free` roster churns.** Slugs get retired, renamed, or rate-limited upstream — treat these IDs as **runtime config, not guarantees**. If a model starts 404-ing or saturating, override the chain with currently-serving slugs (or a paid / ZDR-capable provider). See [docs/model-strategy.md](docs/model-strategy.md).
+> **The `:free` roster churns** — Kimi/GLM/DeepSeek lost their `:free` slugs in 2026. crito prunes retired slugs against the **live catalog** at startup, so a dead model never wastes a slot. Treat model IDs as runtime config. See [docs/model-strategy.md](docs/model-strategy.md).
 
 ## 📊 How crito compares
 

@@ -33,9 +33,9 @@ import time
 import traceback
 
 from crito import authz, diff, ensemble, postprocess, sanitize, secrets_scan
-from crito.config import load_config
+from crito.config import ACTIVE_SLOTS, effective_pool, load_config
 from crito.github_client import GitHubClient
-from crito.openrouter import OpenRouterClient
+from crito.openrouter import OpenRouterClient, prune_to_catalog
 from crito.prompts import SYSTEM_PROMPT, build_user_prompt
 from crito.schema import FINDINGS_SCHEMA
 
@@ -477,14 +477,20 @@ async def run(event: dict, env: dict) -> int:
             profile=cfg.profile,
         )
 
-        # ── Ensemble: same prompt -> <=3 models -> union + dedup ───────────
+        # ── Ensemble: same prompt -> N coding models with per-slot failover ─
         client = OpenRouterClient(openrouter_key, cfg.models)
+        # Ranked failover pool (active primaries first, then the tail), pruned
+        # against the live :free catalog so a retired slug never wastes a slot.
+        pool = effective_pool(cfg)
+        catalog = await client.list_free_models()
+        pool = prune_to_catalog(pool, catalog) or pool
         model_findings = await ensemble.run_ensemble(
             client=client,
-            models=cfg.models,
+            pool=pool,
             system=SYSTEM_PROMPT,
             user=user_prompt,
             response_format=FINDINGS_SCHEMA,
+            active_slots=ACTIVE_SLOTS,
         )
 
         served_models: list = []

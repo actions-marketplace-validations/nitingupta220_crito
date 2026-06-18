@@ -1,8 +1,5 @@
-name: "crito"
-description: >-
-  Zero-infra, BYOK PR reviewer. Reads a pull-request diff via the GitHub API,
-  reviews it with free OpenRouter models, and posts ONE batched review.
-  Pure read-and-comment: it never checks out, builds, or executes PR/fork code.
+name: "crito - AI PR Review"
+description: "Lean AI PR code review - free OpenRouter models, your key, zero infra. One batched review per PR."
 author: "nitingupta220"
 
 branding:

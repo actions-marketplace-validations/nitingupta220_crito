@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="crito icon">
+  <title>crito</title>
+  <desc>An open 'c' aperture forming a keen eye-lens — the crito mark.</desc>
+
+  <!-- Rounded square base so the mark reads as an avatar/favicon on any background -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="#6D28D9"/>
+
+  <!-- The 'c' as an open aperture / lens ring. The gap on the right is the lens opening. -->
+  <path
+    d="M 256 116
+       A 140 140 0 1 0 379.07 326
+       L 333.6 299.74
+       A 87.5 87.5 0 1 1 256 168.5
+       Z"
+    fill="#FFFFFF"/>
+
+  <!-- Pupil / focal point: the discerning eye that completes the lens -->
+  <circle cx="335" cy="256" r="46" fill="#FFFFFF"/>
+  <circle cx="335" cy="256" r="20" fill="#6D28D9"/>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="160" viewBox="0 0 560 160" role="img" aria-label="crito logo">
+  <title>crito</title>
+  <desc>The crito wordmark with an open 'c' aperture lens mark, in brand purple.</desc>
+
+  <!-- ICON: open 'c' aperture that doubles as a keen eye-lens. Drawn on a transparent
+       background so the lockup sits cleanly on light AND dark surfaces. -->
+  <g transform="translate(20, 20)">
+    <!-- Lens ring: an open 'c'. The gap on the right is the aperture opening. -->
+    <path
+      d="M 60 4
+         A 56 56 0 1 0 109.23 88
+         L 91.05 77.5
+         A 35 35 0 1 1 60 25
+         Z"
+      fill="#6D28D9"/>
+    <!-- Focal point / pupil completing the lens -->
+    <circle cx="91.6" cy="60" r="18.4" fill="#6D28D9"/>
+    <circle cx="91.6" cy="60" r="8" fill="#FFFFFF"/>
+  </g>
+
+  <!-- WORDMARK: generic, self-contained font stack so it renders without external fonts. -->
+  <text
+    x="172" y="108"
+    font-family="'Inter', 'Helvetica Neue', Helvetica, Arial, 'Segoe UI', system-ui, sans-serif"
+    font-size="96"
+    font-weight="700"
+    letter-spacing="-3"
+    fill="#6D28D9">crito</text>
+</svg>

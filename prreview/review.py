@@ -409,7 +409,7 @@ async def run(event: dict, env: dict) -> int:
 
         # ── Fetch + filter files ───────────────────────────────────────────
         files = gh.get_pr_files(pr_number)
-        kept, skipped = diff.filter_files(files)
+        kept, skipped = diff.filter_files(files, cfg.ignore)
         if cfg.max_files and len(kept) > cfg.max_files:
             skipped.extend(
                 f.get("filename") or f.get("path") or "?"
@@ -474,6 +474,7 @@ async def run(event: dict, env: dict) -> int:
             pr_title=pr_title,
             pr_body=pr_body,
             custom_rules=cfg.custom_rules,
+            profile=cfg.profile,
         )
 
         # ── Ensemble: same prompt -> <=3 models -> union + dedup ───────────

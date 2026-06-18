@@ -324,6 +324,23 @@ def check_finalize_anchor_gating_and_cap():
     assert len(capped) <= 5, f"finalize must cap to max_findings, got {len(capped)}"
 
 
+def check_ignore_globs():
+    files = [
+        {"filename": "src/app.py", "status": "modified", "patch": "@@ -1 +1 @@\n+x = 1"},
+        {"filename": "src/thing.generated.py", "status": "modified", "patch": "@@ -1 +1 @@\n+y = 2"},
+    ]
+    kept, skipped = diff.filter_files(files, ["*.generated.py"])
+    assert [f["filename"] for f in kept] == ["src/app.py"], "user ignore glob must drop the matched file"
+    assert "src/thing.generated.py" in skipped, "ignored file must be reported as skipped"
+
+
+def check_profile_directive():
+    strict = build_user_prompt("+code", "t", "b", None, profile="strict")
+    assert "REVIEW PROFILE: strict" in strict, "strict profile directive must appear in the prompt"
+    none = build_user_prompt("+code", "t", "b", None)
+    assert "REVIEW PROFILE" not in none, "no profile -> no directive"
+
+
 def check_authz():
     assert authz.is_authorized("OWNER", None) is True, "OWNER must be authorized"
     assert authz.is_authorized("MEMBER", "read") is True, "MEMBER must be authorized"
@@ -353,6 +370,8 @@ def main() -> int:
     check("6b. run_ensemble works with FakeClient", check_run_ensemble_with_fake_client)
     check("7. postprocess.finalize gates anchors + caps", check_finalize_anchor_gating_and_cap)
     check("8. authz.is_authorized OWNER yes / NONE no", check_authz)
+    check("9. filter_files honors user ignore globs", check_ignore_globs)
+    check("10. build_user_prompt injects profile directive", check_profile_directive)
 
     passed = sum(1 for _n, ok, _d in _RESULTS if ok)
     total = len(_RESULTS)

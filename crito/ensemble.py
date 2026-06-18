@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 
+from crito.errors import KeyFatal
 from crito.schema import SEVERITIES, normalize_finding
 
 # Severity ordering: index 0 ("critical") is most severe. Unknown sorts last.
@@ -37,34 +38,25 @@ def _confidence(finding: dict) -> float:
         return 0.0
 
 
-async def _one_model(client, model: str, system: str, user: str, response_format):
-    """Run the shared prompt against a single model; return its findings list.
+async def _claim_next(state):
+    """Hand out the next model from the shared ranked iterator (lock-guarded).
 
-    Passes this one model explicitly via the ``models`` override so the served
-    result is attributable to it AND concurrent ensemble calls never race on
-    shared client state (the calls run under ``asyncio.gather``). Tolerant of
-    every failure mode: a model that errors, returns None, or returns a non-dict
-    simply contributes zero findings rather than failing the whole review.
+    Every model in the ranked pool is given to AT MOST ONE slot, in rank order;
+    returns ``None`` once the pool is exhausted. The lock scopes only the cheap
+    ``next()`` — never an ``await`` on the network — so the ensemble stays
+    concurrent. This is what guarantees no two slots land on the same model and
+    that the total number of model calls is bounded by the pool size.
     """
-    try:
-        parsed, served_model = await client.chat_json(
-            system=system,
-            user=user,
-            response_format=response_format,
-            models=[model],
-        )
-    except Exception:
-        # Network error, HTTP error after retries, etc. This model abstains.
-        return []
+    async with state["lock"]:
+        return next(state["it"], None)
 
-    if not isinstance(parsed, dict):
-        return []
 
+def _findings_from(parsed, served, requested):
+    """Normalize one model's parsed response into stamped finding dicts."""
     raw_findings = parsed.get("findings")
     if not isinstance(raw_findings, list):
-        return []
-
-    attributed = served_model or model
+        return None  # served but malformed -> let the slot advance
+    attributed = served or requested
     out = []
     for raw in raw_findings:
         if not isinstance(raw, dict):
@@ -73,33 +65,82 @@ async def _one_model(client, model: str, system: str, user: str, response_format
         if norm is None:
             continue
         # Stamp attribution so dedup can record cross-model agreement and the
-        # telemetry/postprocess layers can report which models flagged what.
+        # telemetry layer can report which models actually served.
         norm["models"] = [attributed]
         out.append(norm)
     return out
 
 
-async def run_ensemble(client, models: list, system: str, user: str, response_format=None):
-    """Send the SAME (system, user) to each model and return dedup(union).
+async def _slot_worker(client, state, system: str, user: str, response_format):
+    """One ensemble slot.
 
-    - ``models`` is the <=3 model fallback array. Each model gets the identical
-      shared prompt (no per-model specialization — the specialist checklists live
-      inside the single system prompt).
-    - Calls run concurrently; a model that fails contributes nothing.
-    - All returned findings are normalized, unioned, then ``dedup``'d so that the
-      same issue reported by multiple models collapses to one finding carrying
-      every reporting model's attribution.
+    Claims a model from the shared ranked pool and runs the shared prompt against
+    it. If that model is UNAVAILABLE — HTTP failure after retries (429/404/503/…),
+    a network error, or empty/unparseable content — the slot ADVANCES to the next
+    model in the ranked pool and tries again, until a model serves a usable result
+    or the pool is exhausted (then the slot abstains, returning ``[]``).
 
-    Returns a list of finding dicts (schema-shaped). Anchor validation, gating,
-    and capping happen later in ``postprocess.finalize``.
+    A served model that genuinely finds nothing returns ``[]`` and the slot stops
+    (a clean verdict is a success, not a miss). ``KeyFatal`` (dead key) is NOT a
+    per-model problem, so it propagates and aborts the whole run.
     """
-    # Defensive: cap to 3 and drop falsy entries even if the caller didn't.
-    selected = [m for m in (models or []) if m][:3]
+    while True:
+        model = await _claim_next(state)
+        if model is None:
+            return []  # ranked pool exhausted -> this slot abstains
+        try:
+            parsed, served = await client.chat_json(
+                system=system,
+                user=user,
+                response_format=response_format,
+                models=[model],
+            )
+        except KeyFatal:
+            raise  # key/billing dead — advancing models cannot help
+        except Exception:
+            continue  # ModelUnavailable / network / etc. -> next ranked model
+
+        if not isinstance(parsed, dict):
+            continue  # empty content / unparseable JSON -> next ranked model
+
+        findings = _findings_from(parsed, served, model)
+        if findings is None:
+            continue  # served but malformed -> next ranked model
+        return findings  # served (0+ findings) -> slot done
+
+
+async def run_ensemble(client, pool: list, system: str, user: str,
+                       response_format=None, active_slots: int = 3):
+    """Send the SAME prompt to ``active_slots`` distinct models from the TOP of the
+    ranked ``pool``; each slot fails over down the pool and returns dedup(union).
+
+    - ``pool`` is the FULL ranked failover list (best -> worst for code review).
+      The first ``active_slots`` still-serving models become the ensemble; if one
+      is saturated/dead, that slot advances down the pool to the next available
+      model — so a slot only contributes nothing when the whole pool is exhausted.
+    - Each model is tried by at most one slot (shared lock-guarded iterator), so
+      no two slots use the same model and total model calls <= len(pool).
+    - All returned findings are normalized, unioned, then ``dedup``'d so the same
+      issue reported by multiple models collapses to one finding carrying every
+      reporting model's attribution.
+
+    (``pool`` was previously named ``models``; same first positional argument.)
+    """
+    seen: set = set()
+    selected: list = []
+    for m in (pool or []):
+        if m and m not in seen:
+            seen.add(m)
+            selected.append(m)
     if not selected:
         return []
 
+    n = min(max(1, active_slots), len(selected))
+    state = {"it": iter(selected), "lock": asyncio.Lock()}
+
     results = await asyncio.gather(
-        *(_one_model(client, m, system, user, response_format) for m in selected)
+        *(_slot_worker(client, state, system, user, response_format)
+          for _ in range(n))
     )
 
     union: list = []
